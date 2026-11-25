@@ -338,11 +338,32 @@ bulkhead(options) → { execute(fn, { signal }), running, queued }
 
 Limita cuántas llamadas corren a la vez. Si hay cupo, la llamada empieza; si no, espera en una cola de tamaño `maxQueue` y sale en orden de llegada cuando se libera un cupo. Con el cupo y la cola llenos, rechaza al instante con `BulkheadRejectedError`.
 
-- `maxConcurrent`: llamadas en paralelo.
-- `maxQueue` (`0`): llamadas esperando turno.
-- `signal` en `execute`: cancela la espera en la cola.
+Tres consumidores, **A**, **B** y **C**, comparten el mismo bulkhead (`maxConcurrent: 1`, `maxQueue: 1`). Cada llamada dura 2 pasos:
 
-El cupo se libera aunque la llamada falle.
+```
+tiempo → ──────────────────────────────→
+A        ●   ─               ◷   ●   ─
+B            ◷   ●   ─
+C            ○       ◷   ●   ─
+en curso 1   1   1   1   1   1   1   1
+en cola      1       1       1
+
+ ●  empieza   ─  corriendo   ◷  entra a la cola   ○  rechazada al instante con BulkheadRejectedError
+```
+
+- **El cupo es compartido**: entre A, B y C solo corre una llamada a la vez.
+- B llega mientras corre A y **espera en la cola** (`◷`). C llega en el mismo paso, con el cupo y la cola llenos, y **se rechaza** (`○`).
+- Cuando A termina, **B sale de la cola y empieza** sin volver a llamar a `execute`.
+- La cola respeta el **orden de llegada**: después C espera a B, y A espera a C.
+- El cupo se libera aunque la llamada falle.
+
+Por eso el bulkhead se crea **una vez por recurso** (una base de datos, un servicio lento) y lo comparten todos los consumidores. Si cada uno tuviera el suyo, entre todos podrían saturar el recurso.
+
+| Opción          | Por defecto | Descripción                                   |
+| --------------- | ----------- | --------------------------------------------- |
+| `maxConcurrent` | —           | Llamadas en paralelo.                         |
+| `maxQueue`      | `0`         | Llamadas esperando turno.                     |
+| `signal`        | —           | En `execute`: cancela la espera en la cola.   |
 
 ```ts
 const db = resilience.bulkhead({
@@ -365,10 +386,29 @@ throttle(options) → { execute(fn), remaining }
 
 Limita la cantidad de llamadas en una ventana deslizante: como máximo `limit` llamadas en cualquier lapso de `interval` ms. Al superarlo rechaza con `ThrottleError`, cuyo `retryAfter` dice cuántos ms faltan para que se libere un cupo. Las llamadas rechazadas no gastan cupo.
 
-- `limit`: llamadas permitidas por ventana.
-- `interval`: tamaño de la ventana en ms.
+Tres consumidores, **A**, **B** y **C**, comparten el mismo throttle (`limit: 3`, `interval: 5 pasos`):
 
-Sirve para respetar el rate limit de una API externa.
+```
+tiempo → ──────────────────────────────────────────────→
+A        ●   ○               ●                       ●
+B        ●       ○               ●                   ●
+C        ●                   ●       ○
+cupos    0   0   0   0   0   1   0   0   0   0   2   1
+
+ ●  permitida   ○  rechazada al instante con ThrottleError
+```
+
+- **El límite es compartido**: A, B y C gastan los 3 cupos en el primer paso, así que el `○` de A y el de B no llaman al servicio.
+- Cada `ThrottleError` trae `retryAfter`: el de A dice 4 pasos y el de B 3, lo que falta para que la llamada más antigua salga de la ventana.
+- Las rechazadas **no gastan cupo**: cinco pasos después se liberan los 3 cupos del inicio, aunque A y B lo hayan intentado entre medio.
+- La ventana es **deslizante**: en cada paso cuentan las llamadas de los últimos 5 pasos, no las de un bloque fijo.
+
+Por eso el throttle se crea **una vez por API** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, entre todos superarían el rate limit.
+
+| Opción     | Por defecto | Descripción                       |
+| ---------- | ----------- | --------------------------------- |
+| `limit`    | —           | Llamadas permitidas por ventana.  |
+| `interval` | —           | Tamaño de la ventana en ms.       |
 
 ```ts
 const api = resilience.throttle({
@@ -393,8 +433,30 @@ cache(options) → { execute(key, fn), delete(key), clear(), size }
 
 Guarda en memoria el resultado de `fn` para una `key` durante `ttl` ms, contados desde que llega el valor. Mientras el valor es válido, los pedidos lo reciben sin llamar al servicio. Si llega un pedido mientras la primera llamada sigue en curso, comparte esa misma ejecución. Los errores no se guardan.
 
-- `ttl`: vida de cada entrada en ms.
-- `maxSize`: máximo de entradas; al superarlo sale la más antigua.
+Tres consumidores, **A**, **B** y **C**, piden la misma key a un cache compartido (`ttl: 5 pasos`). El servicio tarda 2 pasos en responder:
+
+```
+tiempo → ──────────────────────────────────────────────────────────────→
+A        ●   ─           ◆                   ◌✕              ◆
+B            ◌                   ◆                   ●   ─
+C                ◆                       ✕   ─           ◌
+ttl              5   4   3   2   1                           5   4   3
+
+ ●  miss (llama al servicio)   ─  esperando respuesta   ◆  hit   ◌  comparte la llamada en curso
+ ✕  miss que falla (el error no se guarda)
+```
+
+- A no encuentra el valor y **llama al servicio**. B llega mientras esa llamada sigue en curso y **la comparte** (`◌`) en vez de llamar otra vez.
+- Cuando llega el valor se guarda: C, A y B reciben **hits** (`◆`) durante 5 pasos. La fila `ttl` muestra cuánto le queda.
+- Al vencer el `ttl` la caché queda vacía y el siguiente pedido, de C, vuelve a llamar. Esa llamada **falla**: A, que la compartía, recibe el mismo error (`◌✕`).
+- **El error no se guarda**: B vuelve a llamar, esta vez funciona y el valor queda guardado otros 5 pasos.
+
+Por eso el cache se crea **una vez por tipo de dato** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, cada uno pagaría su propio miss.
+
+| Opción    | Por defecto | Descripción                                               |
+| --------- | ----------- | --------------------------------------------------------- |
+| `ttl`     | —           | Vida de cada entrada en ms.                               |
+| `maxSize` | sin límite  | Máximo de entradas; al superarlo sale la más antigua.     |
 
 ```ts
 const users = resilience.cache({
@@ -417,6 +479,25 @@ dedupe() → { execute(key, fn), pending }
 Si ya hay una llamada en curso con la misma `key`, devuelve esa misma promesa en vez de ejecutar `fn` otra vez. No guarda resultados: en cuanto la llamada termina (bien o con error) la key se libera y el siguiente pedido vuelve a llamar.
 
 Sirve cuando varios componentes piden lo mismo al mismo tiempo, por ejemplo la configuración al arrancar.
+
+Tres consumidores, **A**, **B** y **C**, piden la misma key a un dedupe compartido. El servicio tarda 2 pasos en responder:
+
+```
+tiempo → ──────────────────────────────────────────────────→
+A        ●   ─       ◌                   ◌✕
+B            ◌               ●   ─               ●   ─
+C                ●   ─               ✕   ─           ◌
+pending  1   1   1   1   0   1   1   1   1   0   1   1   0
+
+ ●  llama al servicio   ─  esperando respuesta   ◌  recibe la misma promesa   ✕  llamada que falla
+```
+
+- A llama al servicio y B, que llega mientras tanto, **recibe la misma promesa** (`◌`): una sola petición para los dos.
+- **No guarda resultados**: en cuanto termina la llamada de A la key queda libre (`pending` vuelve a 0) y el siguiente pedido, de C, vuelve a llamar.
+- Si la llamada falla, **todos los que la compartían reciben el error**: C falla y A, que se sumó, recibe el mismo error (`◌✕`).
+- Después de un error la key también se libera, así que el siguiente pedido de B vuelve a intentarlo.
+
+A diferencia de `cache`, `dedupe` solo une los pedidos **simultáneos**. Si necesitas reutilizar el valor después de que llegó, usa `cache`.
 
 ```ts
 const inFlight = resilience.dedupe();
