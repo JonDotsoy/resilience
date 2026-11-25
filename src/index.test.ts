@@ -3,15 +3,15 @@ import { recilience, type RetryEvent } from "./index.js";
 
 describe("recilience", () => {
   test("devuelve el valor de la función", async () => {
-    expect(await recilience().run(() => 42)).toBe(42);
-    expect(await recilience().run(async () => "ok")).toBe("ok");
+    expect(await recilience().attempt(() => 42)).toBe(42);
+    expect(await recilience().attempt(async () => "ok")).toBe("ok");
   });
 
   test("por defecto hace 1 intento", async () => {
     const fn = mock(() => {
       throw new Error("boom");
     });
-    await expect(recilience().run(fn)).rejects.toThrow("boom");
+    await expect(recilience().attempt(fn)).rejects.toThrow("boom");
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -21,7 +21,7 @@ describe("recilience", () => {
       n++;
       throw new Error(`fallo ${n}`);
     });
-    await expect(recilience({ attempts: 3 }).run(fn)).rejects.toThrow("fallo 3");
+    await expect(recilience({ attempts: 3 }).attempt(fn)).rejects.toThrow("fallo 3");
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
@@ -30,14 +30,14 @@ describe("recilience", () => {
       if (attempt < 2) throw new Error("todavía no");
       return attempt;
     });
-    expect(await recilience({ attempts: 5 }).run(fn)).toBe(2);
+    expect(await recilience({ attempts: 5 }).attempt(fn)).toBe(2);
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
   test("control expone attempt, attempts, signal y lastError", async () => {
     const seen: Array<{ attempt: number; attempts: number; lastError: unknown }> = [];
     const err = new Error("x");
-    await recilience({ attempts: 2 }).run((control) => {
+    await recilience({ attempts: 2 }).attempt((control) => {
       expect(control.signal).toBeInstanceOf(AbortSignal);
       seen.push({
         attempt: control.attempt,
@@ -55,7 +55,7 @@ describe("recilience", () => {
   test("onRetry se llama antes de cada reejecución", async () => {
     const events: RetryEvent[] = [];
     const errors = [new Error("a"), new Error("b")];
-    await recilience({ attempts: 3, onRetry: (e) => void events.push(e) }).run(
+    await recilience({ attempts: 3, onRetry: (e) => void events.push(e) }).attempt(
       ({ attempt }) => {
         if (attempt <= 2) throw errors[attempt - 1];
         return "ok";
@@ -69,7 +69,7 @@ describe("recilience", () => {
 
   test("onRetry no se llama si el primer intento funciona", async () => {
     const onRetry = mock(() => {});
-    await recilience({ attempts: 3, onRetry }).run(() => 1);
+    await recilience({ attempts: 3, onRetry }).attempt(() => 1);
     expect(onRetry).not.toHaveBeenCalled();
   });
 
@@ -81,7 +81,7 @@ describe("recilience", () => {
         await Bun.sleep(5);
         order.push("onRetry");
       },
-    }).run(({ attempt }) => {
+    }).attempt(({ attempt }) => {
       order.push(`run ${attempt}`);
       if (attempt === 1) throw new Error();
     });
@@ -92,7 +92,7 @@ describe("recilience", () => {
     const ac = new AbortController();
     ac.abort(new Error("cancelado"));
     const fn = mock(() => 1);
-    await expect(recilience({ signal: ac.signal }).run(fn)).rejects.toThrow("cancelado");
+    await expect(recilience({ signal: ac.signal }).attempt(fn)).rejects.toThrow("cancelado");
     expect(fn).not.toHaveBeenCalled();
   });
 
@@ -106,7 +106,7 @@ describe("recilience", () => {
         }),
     );
     await expect(
-      recilience({ attempts: 5, signal: ac.signal }).run(fn),
+      recilience({ attempts: 5, signal: ac.signal }).attempt(fn),
     ).rejects.toThrow("cancelado");
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -121,7 +121,7 @@ describe("recilience", () => {
         attempts: 3,
         signal: ac.signal,
         onRetry: () => ac.abort(new Error("cancelado")),
-      }).run(fn),
+      }).attempt(fn),
     ).rejects.toThrow("cancelado");
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -130,7 +130,7 @@ describe("recilience", () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response("hola") });
     try {
       let calls = 0;
-      const text = await recilience({ attempts: 2 }).run(async ({ signal }) => {
+      const text = await recilience({ attempts: 2 }).attempt(async ({ signal }) => {
         calls++;
         if (calls === 1) throw new Error("red caída");
         const res = await fetch(server.url, { signal });
@@ -144,7 +144,7 @@ describe("recilience", () => {
 
   test("delay espera los ms indicados entre intentos", async () => {
     const times: number[] = [];
-    await recilience({ attempts: 3, delay: 30 }).run(({ attempt }) => {
+    await recilience({ attempts: 3, delay: 30 }).attempt(({ attempt }) => {
       times.push(performance.now());
       if (attempt < 3) throw new Error();
     });
@@ -154,7 +154,7 @@ describe("recilience", () => {
 
   test("delay no espera antes del primer intento", async () => {
     const start = performance.now();
-    await recilience({ attempts: 3, delay: 200 }).run(() => 1);
+    await recilience({ attempts: 3, delay: 200 }).attempt(() => 1);
     expect(performance.now() - start).toBeLessThan(100);
   });
 
@@ -165,7 +165,7 @@ describe("recilience", () => {
       attempts: 3,
       delay,
       onRetry: (e) => void events.push(e),
-    }).run(({ attempt }) => {
+    }).attempt(({ attempt }) => {
       if (attempt < 3) throw new Error(`e${attempt}`);
     });
     expect(delay).toHaveBeenCalledTimes(2);
@@ -183,7 +183,7 @@ describe("recilience", () => {
     setTimeout(() => ac.abort(new Error("cancelado")), 10);
     const start = performance.now();
     await expect(
-      recilience({ attempts: 3, delay: 5_000, signal: ac.signal }).run(fn),
+      recilience({ attempts: 3, delay: 5_000, signal: ac.signal }).attempt(fn),
     ).rejects.toThrow("cancelado");
     expect(performance.now() - start).toBeLessThan(1_000);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -193,7 +193,7 @@ describe("recilience", () => {
     expect(() => recilience({ delay: -1 })).toThrow(RangeError);
     expect(() => recilience({ delay: Number.NaN })).toThrow(RangeError);
     await expect(
-      recilience({ attempts: 2, delay: () => -5 }).run(() => {
+      recilience({ attempts: 2, delay: () => -5 }).attempt(() => {
         throw new Error("x");
       }),
     ).rejects.toThrow(RangeError);

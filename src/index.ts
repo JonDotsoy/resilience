@@ -51,7 +51,7 @@ export interface RecilienceOptions {
 }
 
 export interface Recilience {
-  run<T>(fn: (control: Control) => T | Promise<T>): Promise<T>;
+  attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T>;
 }
 
 const abortReason = (signal: AbortSignal): unknown =>
@@ -84,7 +84,7 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
  * Crea un ejecutor con reintentos.
  *
  * @example
- * const res = await recilience({ attempts: 3 }).run(({ signal }) =>
+ * const res = await recilience({ attempts: 3 }).attempt(({ signal }) =>
  *   fetch("https://example.com", { signal }),
  * );
  */
@@ -99,7 +99,7 @@ export const recilience = (options: RecilienceOptions = {}): Recilience => {
   if (typeof delay === "number") assertDelay(delay);
 
   return {
-    async run<T>(fn: (control: Control) => T | Promise<T>): Promise<T> {
+    async attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T> {
       let lastError: unknown;
 
       for (let attempt = 1; attempt <= attempts; attempt++) {

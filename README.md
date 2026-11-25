@@ -11,7 +11,7 @@ npm install @jondotsoy/recilience
 ```ts
 import { recilience } from "@jondotsoy/recilience";
 
-const res = await recilience({ attempts: 3 }).run(({ signal }) =>
+const res = await recilience({ attempts: 3 }).attempt(({ signal }) =>
   fetch("https://api.example.com/data", { signal }),
 );
 ```
@@ -19,7 +19,7 @@ const res = await recilience({ attempts: 3 }).run(({ signal }) =>
 ### Sintaxis
 
 ```ts
-recilience(options).run((control) => T | Promise<T>): Promise<T>
+recilience(options).attempt((control) => T | Promise<T>): Promise<T>
 ```
 
 ## Opciones
@@ -51,10 +51,10 @@ La función recibe un objeto `control` en cada intento:
 
 ## Comportamiento
 
-- Si la función se resuelve, `run` devuelve ese valor y no hay más intentos.
-- Si falla en todos los intentos, `run` rechaza con el error del último intento.
+- Si la función se resuelve, `attempt` devuelve ese valor y no hay más intentos.
+- Si falla en todos los intentos, `attempt` rechaza con el error del último intento.
 - Entre un intento fallido y el siguiente: se llama `onRetry`, luego se espera `delay` ms.
-- Si `options.signal` se aborta (incluso durante la espera), `run` rechaza con `signal.reason` y no reintenta.
+- Si `options.signal` se aborta (incluso durante la espera), `attempt` rechaza con `signal.reason` y no reintenta.
 
 ## Ejemplos
 
@@ -66,7 +66,7 @@ await recilience({
   onRetry: ({ attempt, attempts, error }) => {
     console.warn(`Reintento ${attempt}/${attempts}`, error);
   },
-}).run(({ signal }) => fetch(url, { signal }));
+}).attempt(({ signal }) => fetch(url, { signal }));
 ```
 
 Cancelar con timeout:
@@ -75,13 +75,13 @@ Cancelar con timeout:
 await recilience({
   attempts: 3,
   signal: AbortSignal.timeout(10_000),
-}).run(({ signal }) => fetch(url, { signal }));
+}).attempt(({ signal }) => fetch(url, { signal }));
 ```
 
 Esperar 500 ms entre intentos:
 
 ```ts
-await recilience({ attempts: 3, delay: 500 }).run(task);
+await recilience({ attempts: 3, delay: 500 }).attempt(task);
 ```
 
 Backoff exponencial (200 ms, 400 ms, 800 ms, ...):
@@ -91,7 +91,7 @@ await recilience({
   attempts: 5,
   delay: ({ attempt }) => 100 * 2 ** (attempt - 1),
   onRetry: ({ attempt, delay }) => console.warn(`Reintento ${attempt} en ${delay} ms`),
-}).run(task);
+}).attempt(task);
 ```
 
 ## Desarrollo
