@@ -4,7 +4,6 @@ import {
   fixedBackoff,
   linearBackoff,
 } from "./backoff.js";
-import { fallback } from "./fallback.js";
 import { circuitBreaker } from "./circuit-breaker.js";
 import { bulkhead } from "./bulkhead.js";
 import { throttle } from "./throttle.js";
@@ -54,7 +53,7 @@ export interface DelayContext {
   readonly error: unknown;
 }
 
-export interface ResilienceOptions {
+export interface ResilienceOptions<F = never> {
   /** Número de intentos antes de rechazar. Por defecto `1`. */
   attempts?: number;
   /** Signal para cancelar la ejecución y los reintentos pendientes. */
@@ -80,6 +79,21 @@ export interface ResilienceOptions {
    * cuenta como un fallo más (se puede reintentar).
    */
   timeout?: number;
+  /**
+   * Se llama cuando la ejecución falla definitivamente (se agotaron los
+   * intentos o `retryable` devolvió `false`). Lo que devuelva pasa a ser el
+   * resultado de `attempt`; si lanza un error, `attempt` rechaza con ese error.
+   * No se llama cuando se aborta `signal`.
+   */
+  fallback?: (lastError: unknown, context: FallbackContext) => F | Promise<F>;
+}
+
+/** Datos que recibe `fallback`. */
+export interface FallbackContext {
+  /** Intentos que se alcanzaron a ejecutar. */
+  readonly attempt: number;
+  /** Total de intentos permitidos. */
+  readonly attempts: number;
 }
 
 /** Datos que recibe `retryable`. */
@@ -90,8 +104,8 @@ export interface RetryableContext {
   readonly attempts: number;
 }
 
-export interface Resilience {
-  attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T>;
+export interface Resilience<F = never> {
+  attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T | F>;
 }
 
 const abortReason = (signal: AbortSignal): unknown =>
@@ -131,14 +145,23 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
  *   fetch("https://example.com", { signal }),
  * );
  */
-const createResilience = (options: ResilienceOptions = {}): Resilience => {
+const createResilience = <F = never>(
+  options: ResilienceOptions<F> = {},
+): Resilience<F> => {
   const attempts = options.attempts ?? 1;
   if (!Number.isInteger(attempts) || attempts < 1) {
     throw new RangeError(
       `options.attempts must be an integer >= 1, received ${attempts}`,
     );
   }
-  const { signal: parentSignal, onRetry, retryable, timeout, delay = 0 } = options;
+  const {
+    signal: parentSignal,
+    onRetry,
+    retryable,
+    timeout,
+    fallback,
+    delay = 0,
+  } = options;
   if (typeof delay === "number") assertDelay(delay);
   if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) {
     throw new RangeError(
@@ -146,67 +169,82 @@ const createResilience = (options: ResilienceOptions = {}): Resilience => {
     );
   }
 
-  return {
-    async attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T> {
-      let lastError: unknown;
+  const run = async <T>(
+    fn: (control: Control) => T | Promise<T>,
+    progress: { attempt: number },
+  ): Promise<T> => {
+    let lastError: unknown;
 
-      for (let attempt = 1; attempt <= attempts; attempt++) {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      progress.attempt = attempt;
+      if (parentSignal?.aborted) throw abortReason(parentSignal);
+
+      if (attempt > 1) {
+        const context = { attempt, attempts, error: lastError };
+        const ms = assertDelay(
+          typeof delay === "function" ? delay(context) : delay,
+        );
+        if (onRetry) await onRetry({ ...context, delay: ms });
+        await sleep(ms, parentSignal);
         if (parentSignal?.aborted) throw abortReason(parentSignal);
-
-        if (attempt > 1) {
-          const context = { attempt, attempts, error: lastError };
-          const ms = assertDelay(
-            typeof delay === "function" ? delay(context) : delay,
-          );
-          if (onRetry) await onRetry({ ...context, delay: ms });
-          await sleep(ms, parentSignal);
-          if (parentSignal?.aborted) throw abortReason(parentSignal);
-        }
-
-        // Cada intento tiene su propio controller, enlazado al signal externo.
-        const controller = new AbortController();
-        const onAbort = () => controller.abort(abortReason(parentSignal!));
-        parentSignal?.addEventListener("abort", onAbort, { once: true });
-        let timer: ReturnType<typeof setTimeout> | undefined;
-
-        try {
-          const run = Promise.resolve().then(() =>
-            fn({ signal: controller.signal, attempt, attempts, lastError }),
-          );
-          if (timeout === undefined) return await run;
-
-          // Si vence el timeout, la promesa de `fn` puede rechazar después.
-          run.catch(() => {});
-          return await Promise.race([
-            run,
-            new Promise<never>((_, reject) => {
-              timer = setTimeout(() => {
-                const error = timeoutError(timeout);
-                controller.abort(error);
-                reject(error);
-              }, timeout);
-            }),
-          ]);
-        } catch (error) {
-          // Si se canceló desde afuera, no se reintenta.
-          if (parentSignal?.aborted) throw abortReason(parentSignal);
-          if (
-            attempt < attempts &&
-            retryable &&
-            !(await retryable(error, { attempt, attempts }))
-          ) {
-            throw error;
-          }
-          lastError = error;
-        } finally {
-          clearTimeout(timer);
-          // No se aborta el controller al terminar: un `fetch` resuelto aún
-          // puede estar leyendo el body con ese signal.
-          parentSignal?.removeEventListener("abort", onAbort);
-        }
       }
 
-      throw lastError;
+      // Cada intento tiene su propio controller, enlazado al signal externo.
+      const controller = new AbortController();
+      const onAbort = () => controller.abort(abortReason(parentSignal!));
+      parentSignal?.addEventListener("abort", onAbort, { once: true });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      try {
+        const run = Promise.resolve().then(() =>
+          fn({ signal: controller.signal, attempt, attempts, lastError }),
+        );
+        if (timeout === undefined) return await run;
+
+        // Si vence el timeout, la promesa de `fn` puede rechazar después.
+        run.catch(() => {});
+        return await Promise.race([
+          run,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              const error = timeoutError(timeout);
+              controller.abort(error);
+              reject(error);
+            }, timeout);
+          }),
+        ]);
+      } catch (error) {
+        // Si se canceló desde afuera, no se reintenta.
+        if (parentSignal?.aborted) throw abortReason(parentSignal);
+        if (
+          attempt < attempts &&
+          retryable &&
+          !(await retryable(error, { attempt, attempts }))
+        ) {
+          throw error;
+        }
+        lastError = error;
+      } finally {
+        clearTimeout(timer);
+        // No se aborta el controller al terminar: un `fetch` resuelto aún
+        // puede estar leyendo el body con ese signal.
+        parentSignal?.removeEventListener("abort", onAbort);
+      }
+    }
+
+    throw lastError;
+  };
+
+  return {
+    async attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T | F> {
+      const progress = { attempt: 0 };
+      try {
+        return await run(fn, progress);
+      } catch (error) {
+        // Cancelar no es un fallo: no se usa el fallback.
+        if (!fallback || parentSignal?.aborted) throw error;
+        return fallback(error, { attempt: progress.attempt, attempts });
+      }
     },
   };
 };
@@ -226,7 +264,6 @@ export const resilience = Object.assign(createResilience, {
   linearBackoff,
   exponentialBackoff,
   fibonacciBackoff,
-  fallback,
   circuitBreaker,
   bulkhead,
   throttle,
@@ -239,7 +276,6 @@ export const resilience = Object.assign(createResilience, {
 
 export * from "./backoff.js";
 export * from "./errors.js";
-export * from "./fallback.js";
 export * from "./circuit-breaker.js";
 export * from "./bulkhead.js";
 export * from "./throttle.js";

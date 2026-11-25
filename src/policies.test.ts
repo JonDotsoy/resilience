@@ -7,7 +7,6 @@ import {
   cache,
   circuitBreaker,
   dedupe,
-  fallback,
   resilience,
   throttle,
 } from "./index.js";
@@ -27,27 +26,6 @@ const deferred = <T = void>() => {
 };
 
 afterEach(() => setSystemTime());
-
-describe("fallback", () => {
-  test("devuelve el resultado si no falla", async () => {
-    expect(await fallback(() => 1, () => 2)).toBe(1);
-  });
-
-  test("usa el handler con el error si falla", async () => {
-    const handler = mock((e: unknown) => (e as Error).message);
-    expect(await fallback(fail("x"), handler)).toBe("x");
-  });
-
-  test("se combina con resilience", async () => {
-    const fn = mock(fail());
-    const result = await fallback(
-      () => resilience({ attempts: 3 }).attempt(fn),
-      () => "default",
-    );
-    expect(result).toBe("default");
-    expect(fn).toHaveBeenCalledTimes(3);
-  });
-});
 
 describe("circuitBreaker", () => {
   test("se abre tras failureThreshold fallos seguidos y rechaza rápido", async () => {
@@ -264,6 +242,17 @@ describe("dedupe", () => {
 });
 
 describe("composición", () => {
+  test("breaker + resilience con fallback", async () => {
+    const breaker = circuitBreaker({ failureThreshold: 1 });
+    const call = () =>
+      resilience({ fallback: () => "default" }).attempt(() =>
+        breaker.execute(fail()),
+      );
+    expect(await call()).toBe("default");
+    expect(breaker.state).toBe("open");
+    expect(await call()).toBe("default");
+  });
+
   test("breaker + resilience + bulkhead", async () => {
     const breaker = circuitBreaker({ failureThreshold: 1 });
     const pool = bulkhead({ maxConcurrent: 2 });

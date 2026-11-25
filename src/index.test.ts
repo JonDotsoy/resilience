@@ -360,6 +360,93 @@ describe("resilience", () => {
   });
 });
 
+describe("fallback", () => {
+  test("no se llama si la función funciona", async () => {
+    const fallback = mock(() => null);
+    expect(await resilience({ fallback }).attempt(() => 1)).toBe(1);
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  test("recibe el último error y su valor es el resultado de attempt", async () => {
+    const errors = [new Error("e1"), new Error("e2"), new Error("e3")];
+    const fallback = mock(async (_lastError: unknown) => null);
+    const result = await resilience({ attempts: 3, fallback }).attempt(
+      ({ attempt }) => {
+        throw errors[attempt - 1];
+      },
+    );
+    expect(result).toBeNull();
+    expect(fallback).toHaveBeenCalledTimes(1);
+    expect(fallback).toHaveBeenCalledWith(errors[2], { attempt: 3, attempts: 3 });
+  });
+
+  test("puede devolver el error como valor", async () => {
+    const original = new Error("x");
+    const result = await resilience({
+      fallback: (lastError) => lastError as Error,
+    }).attempt(() => {
+      throw original;
+    });
+    expect(result).toBe(original);
+  });
+
+  test("si el fallback lanza, attempt rechaza con ese error", async () => {
+    await expect(
+      resilience({
+        fallback: () => {
+          throw new Error("desde fallback");
+        },
+      }).attempt(() => {
+        throw new Error("original");
+      }),
+    ).rejects.toThrow("desde fallback");
+  });
+
+  test("se usa cuando retryable devuelve false", async () => {
+    const fn = mock(() => {
+      throw new Error("401");
+    });
+    const result = await resilience({
+      attempts: 3,
+      retryable: () => false,
+      fallback: (_e, { attempt }) => `fallback tras ${attempt}`,
+    }).attempt(fn);
+    expect(result).toBe("fallback tras 1");
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test("se usa cuando vence el timeout de todos los intentos", async () => {
+    const result = await resilience({
+      attempts: 2,
+      timeout: 10,
+      fallback: (e) => (e as DOMException).name,
+    }).attempt(() => new Promise(() => {}));
+    expect(result).toBe("TimeoutError");
+  });
+
+  test("no se llama cuando se aborta el signal", async () => {
+    const ac = new AbortController();
+    const fallback = mock(() => null);
+    setTimeout(() => ac.abort(new Error("cancelado")), 5);
+    await expect(
+      resilience({ signal: ac.signal, fallback }).attempt(
+        ({ signal }) =>
+          new Promise((_, reject) =>
+            signal.addEventListener("abort", () => reject(signal.reason)),
+          ),
+      ),
+    ).rejects.toThrow("cancelado");
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  test("el tipo del resultado incluye el del fallback", async () => {
+    const result: number | null = await resilience({
+      fallback: async () => null,
+    }).attempt(() => 1);
+    expect(result).toBe(1);
+  });
+});
+
 describe("utilidades en resilience.*", () => {
   test("los helpers están disponibles como propiedades", () => {
     expect(resilience.exponentialBackoff).toBe(exponentialBackoff);
@@ -368,7 +455,6 @@ describe("utilidades en resilience.*", () => {
       "linearBackoff",
       "exponentialBackoff",
       "fibonacciBackoff",
-      "fallback",
       "circuitBreaker",
       "bulkhead",
       "throttle",

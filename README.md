@@ -32,6 +32,7 @@ resilience(options).attempt((control) => T | Promise<T>): Promise<T>
 | `onRetry`  | `(event: RetryEvent) => void \| Promise<void>` | —           | Se llama antes de cada reejecución (antes de la espera). Si devuelve una promesa, se espera. |
 | `retryable` | `(error, ctx: RetryableContext) => boolean \| Promise<boolean>` | reintenta todo | Si devuelve `false`, rechaza de inmediato con ese error sin reintentar. `ctx` tiene `attempt` (el que falló) y `attempts`. |
 | `timeout`  | `number`                                     | —           | Tiempo máximo en ms por intento. Al vencer aborta `control.signal` y el intento falla con `DOMException` `"TimeoutError"`, que se puede reintentar. |
+| `fallback` | `(lastError, ctx: FallbackContext) => F \| Promise<F>` | — | Se llama cuando la ejecución falla definitivamente. Lo que devuelva pasa a ser el resultado de `attempt` (el tipo queda `T \| F`). Si lanza, `attempt` rechaza con ese error. No se llama al abortar `signal`. `ctx` tiene `attempt` (intentos ejecutados) y `attempts`. |
 
 `RetryEvent` contiene:
 
@@ -55,7 +56,8 @@ La función recibe un objeto `control` en cada intento:
 
 - Si la función se resuelve, `attempt` devuelve ese valor y no hay más intentos.
 - Si `retryable` devuelve `false`, rechaza con ese error sin más intentos.
-- Si falla en todos los intentos, `attempt` rechaza con el error del último intento.
+- Si hay `fallback`, cualquier fallo definitivo (intentos agotados o `retryable` en `false`) se resuelve con lo que devuelva el fallback.
+- Si falla en todos los intentos sin `fallback`, `attempt` rechaza con el error del último intento.
 - Entre un intento fallido y el siguiente: se llama `onRetry`, luego se espera `delay` ms.
 - Si `options.signal` se aborta (incluso durante la espera), `attempt` rechaza con `signal.reason` y no reintenta.
 
@@ -97,6 +99,18 @@ Esperar 500 ms entre intentos:
 
 ```ts
 await resilience({ attempts: 3, delay: 500 }).attempt(task);
+```
+
+Valor alternativo cuando todo falla:
+
+```ts
+const user = await resilience({
+  attempts: 3,
+  fallback: async (lastError) => {
+    console.error("No se pudo obtener el usuario", lastError);
+    return null;
+  },
+}).attempt(({ signal }) => getUser(id, signal)); // User | null
 ```
 
 Timeout de 2 s por intento, solo reintentar errores de servidor:
@@ -158,19 +172,6 @@ const breaker = resilience.circuitBreaker({ failureThreshold: 3 });
 ## Políticas con estado
 
 Además de `resilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `resilience`.
-
-### fallback
-
-Devuelve un valor alternativo si la tarea falla.
-
-```ts
-import { fallback, resilience } from "@jondotsoy/resilience";
-
-const user = await fallback(
-  () => resilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
-  (error) => anonymousUser,
-);
-```
 
 ### circuitBreaker
 
@@ -249,15 +250,17 @@ const breaker = circuitBreaker({ failureThreshold: 3 });
 const pool = bulkhead({ maxConcurrent: 10 });
 
 const getData = () =>
-  fallback(
-    () =>
-      breaker.execute(() =>
-        resilience({ attempts: 3, timeout: 2_000, delay: exponentialBackoff(200) }).attempt(
-          ({ signal }) => pool.execute(() => fetch(url, { signal }), { signal }),
-        ),
-      ),
-    () => cachedData,
+  breaker.execute(() =>
+    resilience({
+      attempts: 3,
+      timeout: 2_000,
+      delay: exponentialBackoff(200),
+    }).attempt(({ signal }) => pool.execute(() => fetch(url, { signal }), { signal })),
   );
+
+// Con fallback por fuera, incluso un CircuitOpenError termina en el valor alternativo:
+const getDataSafe = () =>
+  resilience({ fallback: () => cachedData }).attempt(getData);
 ```
 
 ## Desarrollo
