@@ -143,9 +143,22 @@ await resilience({ timeout: 1_000 }).attempt(task);
 // waitForTask: true: aborta control.signal pero espera a que la tarea termine.
 const result = await resilience({ timeout: 1_000, waitForTask: true }).attempt(
   async ({ signal }) => {
-    await saveProgress(); // termina lo que está haciendo
-    if (signal.aborted) return "parcial";
-    return "completo";
+    const items: string[] = [];
+    let stop = false;
+
+    signal.addEventListener("abort", () => {
+      // signal.reason es un TimeoutError: se termina el ítem actual y se corta.
+      console.warn("Tiempo agotado, guardando lo procesado", signal.reason);
+      stop = true;
+    });
+
+    for (const item of queue) {
+      if (stop) break;
+      items.push(await process(item));
+    }
+
+    await save(items);
+    return { items, complete: !stop };
   },
 );
 // → lo que devuelva la tarea; si la tarea lanza, `attempt` rechaza (o reintenta, en un timeout).
