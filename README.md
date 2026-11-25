@@ -332,37 +332,80 @@ breaker.reset();
 
 ### bulkhead
 
-Limita cuántas llamadas corren en paralelo. Si no hay cupo ni espacio en la cola, lanza `BulkheadRejectedError`.
+```ts
+bulkhead(options) → { execute(fn, { signal }), running, queued }
+```
+
+Limita cuántas llamadas corren a la vez. Si hay cupo, la llamada empieza; si no, espera en una cola de tamaño `maxQueue` y sale en orden de llegada cuando se libera un cupo. Con el cupo y la cola llenos, rechaza al instante con `BulkheadRejectedError`.
+
+- `maxConcurrent`: llamadas en paralelo.
+- `maxQueue` (`0`): llamadas esperando turno.
+- `signal` en `execute`: cancela la espera en la cola.
+
+El cupo se libera aunque la llamada falle.
 
 ```ts
-const pool = bulkhead({ maxConcurrent: 5, maxQueue: 20 });
+const db = resilience.bulkhead({
+  maxConcurrent: 2,
+  maxQueue: 1,
+});
 
-await pool.execute(() => fetch(url), { signal }); // signal cancela la espera en cola
-pool.running; // en curso
-pool.queued;  // esperando
+export const query = (sql: string, signal?: AbortSignal) =>
+  db.execute(() => client.query(sql), { signal });
+
+db.running; // en curso
+db.queued;  // esperando
 ```
 
 ### throttle
 
-Limita la cantidad de llamadas en una ventana deslizante. Al superarla lanza `ThrottleError`, con `retryAfter` en ms.
+```ts
+throttle(options) → { execute(fn), remaining }
+```
+
+Limita la cantidad de llamadas en una ventana deslizante: como máximo `limit` llamadas en cualquier lapso de `interval` ms. Al superarlo rechaza con `ThrottleError`, cuyo `retryAfter` dice cuántos ms faltan para que se libere un cupo. Las llamadas rechazadas no gastan cupo.
+
+- `limit`: llamadas permitidas por ventana.
+- `interval`: tamaño de la ventana en ms.
+
+Sirve para respetar el rate limit de una API externa.
 
 ```ts
-const limiter = throttle({ limit: 10, interval: 1_000 }); // 10 por segundo
+const api = resilience.throttle({
+  limit: 3,
+  interval: 1_000, // 3 por segundo
+});
 
-await limiter.execute(() => fetch(url));
-limiter.remaining;
+try {
+  await api.execute(() => fetch(url));
+} catch (error) {
+  if (error instanceof resilience.ThrottleError) {
+    console.log("reintentar en", error.retryAfter, "ms");
+  }
+}
 ```
 
 ### cache
 
-Guarda en memoria el resultado por `ttl` ms. No guarda errores. Las llamadas simultáneas con la misma key comparten la ejecución.
+```ts
+cache(options) → { execute(key, fn), delete(key), clear(), size }
+```
+
+Guarda en memoria el resultado de `fn` para una `key` durante `ttl` ms, contados desde que llega el valor. Mientras el valor es válido, los pedidos lo reciben sin llamar al servicio. Si llega un pedido mientras la primera llamada sigue en curso, comparte esa misma ejecución. Los errores no se guardan.
+
+- `ttl`: vida de cada entrada en ms.
+- `maxSize`: máximo de entradas; al superarlo sale la más antigua.
 
 ```ts
-const users = cache({ ttl: 60_000, maxSize: 500 });
+const users = resilience.cache({
+  ttl: 60_000,
+  maxSize: 500,
+});
 
-await users.execute(`user:${id}`, () => getUser(id));
-users.delete(`user:${id}`);
-users.clear();
+export const getUser = (id: string) =>
+  users.execute(`user:${id}`, () => fetchUser(id));
+
+users.delete("user:42"); // invalidar una entrada
 ```
 
 ### dedupe
@@ -376,11 +419,13 @@ Si ya hay una llamada en curso con la misma `key`, devuelve esa misma promesa en
 Sirve cuando varios componentes piden lo mismo al mismo tiempo, por ejemplo la configuración al arrancar.
 
 ```ts
-const inFlight = dedupe();
+const inFlight = resilience.dedupe();
 
-const [a, b] = await Promise.all([
+// A, B y C llaman casi a la vez: una sola petición
+const [a, b, c] = await Promise.all([
   inFlight.execute("config", loadConfig),
-  inFlight.execute("config", loadConfig), // no vuelve a llamar a loadConfig
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig),
 ]);
 ```
 
