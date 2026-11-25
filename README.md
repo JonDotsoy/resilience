@@ -532,35 +532,6 @@ const getDataSafe = () =>
   resilience({ fallback: () => cachedData }).attempt(getData);
 ```
 
-## Desarrollo
-
-```sh
-bun install
-bun test
-bun run typecheck
-bun run build   # compila y prepara dist/ como paquete (package.json, README, LICENSE)
-bun run pack    # build + npm pack ./dist → jondotsoy-resilience-<versión>.tgz
-```
-
-Para publicar se usa el workflow **Publish** (GitHub Actions, manual). Incrementa la versión (`none`, `patch`, `minor` o `major`), corre typecheck y tests, arma `dist/` y lo deja en staging con `npm stage publish ./dist` usando trusted publishing (OIDC), sin `NPM_TOKEN`. Al terminar sube el commit y el tag `vX.Y.Z` a la rama desde la que se lanzó, y crea el release `vX.Y.Z` en GitHub con notas generadas y el `.tgz` adjunto (como prerelease si el tag no es `latest`).
-
-La versión no queda publicada hasta aprobarla con 2FA:
-
-```sh
-npm stage list @jondotsoy/resilience
-npm stage approve <stage-id> --otp=<código>   # o npm stage reject <stage-id>
-```
-
-Para lanzar el workflow:
-
-```sh
-gh workflow run Publish --ref develop -f version=patch -f tag=latest -f provenance=true
-```
-
-## Licencia
-
-MIT
-
 ## Guía: crear un decorador con `resilience`
 
 `resilience` no trae un decorador, pero se arma en pocas líneas. Esta guía usa los decoradores estándar de TypeScript 5 (sin `experimentalDecorators`), que también soporta Bun.
@@ -661,3 +632,7 @@ class PaymentsApi {
 - El `control` va siempre al final, después de los argumentos que pasó quien llama. Si el método tiene parámetros opcionales antes de `control` y se omiten, el `control` quedaría en otra posición. Prefiere parámetros fijos o un objeto de opciones.
 - Con opciones fijas, la configuración se comparte entre todas las instancias de la clase.
 - El decorador devuelve siempre una promesa, aunque el método original sea síncrono.
+
+## Licencia
+
+MIT
