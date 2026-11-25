@@ -33,6 +33,7 @@ resilience(options).attempt((control) => T | Promise<T>): Promise<T>
 | `retryable` | `(error, ctx: RetryableContext) => boolean \| Promise<boolean>` | reintenta todo | Si devuelve `false`, rechaza de inmediato con ese error sin reintentar. `ctx` tiene `attempt` (el que falló) y `attempts`. |
 | `timeout`  | `number`                                     | —           | Tiempo máximo en ms por intento. Al vencer aborta `control.signal` y el intento falla con `DOMException` `"TimeoutError"`, que se puede reintentar. |
 | `fallback` | `(lastError, ctx: FallbackContext) => F \| Promise<F>` | — | Se llama cuando la ejecución falla definitivamente. Lo que devuelva pasa a ser el resultado de `attempt` (el tipo queda `T \| F`). Si lanza, `attempt` rechaza con ese error. No se llama al abortar `signal`. `ctx` tiene `attempt` (intentos ejecutados) y `attempts`. |
+| `waitForTask` | `boolean` | `false` | Qué hace `attempt` al abortarse `signal` o vencer `timeout`. `false`: rechaza en ese momento (con `TimeoutError` en un timeout), aunque la tarea siga corriendo. `true`: aborta `control.signal` y espera a la tarea, entregando lo que devuelva o lance. |
 
 `RetryEvent` contiene:
 
@@ -94,7 +95,7 @@ La función recibe un objeto `control` en cada intento:
 - Si hay `fallback`, cualquier fallo definitivo (intentos agotados o `retryable` en `false`) se resuelve con lo que devuelva el fallback.
 - Si falla en todos los intentos sin `fallback`, `attempt` rechaza con el error del último intento.
 - Entre un intento fallido y el siguiente: se llama `onRetry`, luego se espera `delay` ms.
-- Si `options.signal` se aborta (incluso durante la espera), `attempt` rechaza con `signal.reason` y no reintenta.
+- Si `options.signal` se aborta (incluso durante la espera), `attempt` rechaza en ese momento con `signal.reason` y no reintenta. Con `waitForTask: true`, espera a la tarea y entrega su resultado o su error.
 
 ## Ejemplos
 
@@ -129,6 +130,26 @@ await resilience({
 ```
 
 En ambos casos `control.signal` recibe el evento `abort`, así que basta con pasárselo a `fetch` o a la API que uses.
+
+### ¿Esperar a la tarea o no? (`waitForTask`)
+
+Abortar solo **avisa** a la tarea: si la tarea ignora `control.signal`, puede seguir corriendo. `waitForTask` decide qué hace el `await` de `.attempt()`:
+
+```ts
+// Por defecto (waitForTask: false): rechaza apenas vence el timeout o se aborta el signal.
+await resilience({ timeout: 1_000 }).attempt(task);
+// → TimeoutError al segundo, aunque `task` siga corriendo.
+
+// waitForTask: true: aborta control.signal pero espera a que la tarea termine.
+const result = await resilience({ timeout: 1_000, waitForTask: true }).attempt(
+  async ({ signal }) => {
+    await saveProgress(); // termina lo que está haciendo
+    if (signal.aborted) return "parcial";
+    return "completo";
+  },
+);
+// → lo que devuelva la tarea; si la tarea lanza, `attempt` rechaza (o reintenta, en un timeout).
+```
 
 Esperar 500 ms entre intentos:
 

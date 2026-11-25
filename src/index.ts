@@ -80,6 +80,15 @@ export interface ResilienceOptions<F = never> extends LifecycleHooks<F> {
    */
   timeout?: number;
   /**
+   * Qué hace `attempt` cuando se aborta `signal` o vence `timeout`:
+   * - `false` (por defecto): rechaza en ese momento con el motivo del abort
+   *   (`TimeoutError` para `timeout` y `AbortSignal.timeout()`), aunque la
+   *   tarea siga corriendo.
+   * - `true`: aborta `control.signal` pero espera a la tarea, y entrega lo que
+   *   la tarea devuelva o lance.
+   */
+  waitForTask?: boolean;
+  /**
    * Se llama cuando la ejecución falla definitivamente (se agotaron los
    * intentos o `retryable` devolvió `false`). Lo que devuelva pasa a ser el
    * resultado de `attempt`; si lanza un error, `attempt` rechaza con ese error.
@@ -225,6 +234,7 @@ const createResilience = <F = never>(
     timeout,
     fallback,
     delay = 0,
+    waitForTask = false,
     onStart,
     onAttempt,
     onTimeout,
@@ -273,24 +283,32 @@ const createResilience = <F = never>(
         const run = Promise.resolve().then(() =>
           fn({ signal: controller.signal, attempt, attempts, lastError }),
         );
-        if (timeout === undefined) return await run;
+        if (timeout !== undefined) {
+          timer = setTimeout(() => {
+            timedOut = true;
+            controller.abort(timeoutError(timeout));
+          }, timeout);
+        }
 
-        // Si vence el timeout, la promesa de `fn` puede rechazar después.
+        // La tarea decide cuándo termina: se devuelve lo que ella devuelva.
+        if (waitForTask) return await run;
+
+        // Si se aborta (signal o timeout) se rechaza en ese momento; la
+        // promesa de la tarea puede rechazar después.
         run.catch(() => {});
         return await Promise.race([
           run,
           new Promise<never>((_, reject) => {
-            timer = setTimeout(() => {
-              const error = timeoutError(timeout);
-              timedOut = true;
-              controller.abort(error);
-              reject(error);
-            }, timeout);
+            const reject_ = () => reject(controller.signal.reason);
+            if (controller.signal.aborted) return reject_();
+            controller.signal.addEventListener("abort", reject_, { once: true });
           }),
         ]);
       } catch (error) {
         // Si se canceló desde afuera, no se reintenta.
-        if (parentSignal?.aborted) throw abortReason(parentSignal);
+        if (parentSignal?.aborted) {
+          throw waitForTask ? error : abortReason(parentSignal);
+        }
         if (timedOut) await onTimeout?.({ attempt, attempts, timeout: timeout! });
         const willRetry =
           attempt < attempts &&

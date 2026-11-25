@@ -447,6 +447,96 @@ describe("fallback", () => {
   });
 });
 
+describe("waitForTask", () => {
+  // Tarea que ignora el signal y termina sola después de `ms`.
+  const stubborn = (ms: number, value = "terminó") => async () => {
+    await Bun.sleep(ms);
+    return value;
+  };
+
+  test("por defecto, timeout rechaza en el momento con TimeoutError", async () => {
+    const start = performance.now();
+    const error = await resilience({ timeout: 20 })
+      .attempt(stubborn(200))
+      .catch((e: unknown) => e);
+    expect((error as DOMException).name).toBe("TimeoutError");
+    expect(performance.now() - start).toBeLessThan(150);
+  });
+
+  test("por defecto, abortar signal rechaza en el momento aunque la tarea ignore el signal", async () => {
+    const start = performance.now();
+    const error = await resilience({ signal: AbortSignal.timeout(20) })
+      .attempt(stubborn(200))
+      .catch((e: unknown) => e);
+    expect((error as DOMException).name).toBe("TimeoutError");
+    expect(performance.now() - start).toBeLessThan(150);
+  });
+
+  test("por defecto, un abort manual rechaza con su reason", async () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(new Error("cancelado")), 10);
+    await expect(
+      resilience({ signal: ac.signal }).attempt(stubborn(200)),
+    ).rejects.toThrow("cancelado");
+  });
+
+  test("waitForTask con timeout: aborta control.signal pero entrega el resultado de la tarea", async () => {
+    let signal: AbortSignal | undefined;
+    const result = await resilience({ timeout: 20, waitForTask: true }).attempt(
+      async (control) => {
+        signal = control.signal;
+        await Bun.sleep(60);
+        return "terminó";
+      },
+    );
+    expect(result).toBe("terminó");
+    expect(signal?.aborted).toBe(true);
+    expect((signal?.reason as DOMException).name).toBe("TimeoutError");
+  });
+
+  test("waitForTask con signal: espera a la tarea y entrega su resultado", async () => {
+    const result = await resilience({
+      signal: AbortSignal.timeout(20),
+      waitForTask: true,
+    }).attempt(stubborn(60));
+    expect(result).toBe("terminó");
+  });
+
+  test("waitForTask: si la tarea lanza al abortar, attempt rechaza con ese error", async () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 10);
+    await expect(
+      resilience({ signal: ac.signal, waitForTask: true }).attempt(
+        ({ signal }) =>
+          new Promise((_, reject) =>
+            signal.addEventListener("abort", () =>
+              reject(new Error("la tarea se detuvo")),
+            ),
+          ),
+      ),
+    ).rejects.toThrow("la tarea se detuvo");
+  });
+
+  test("waitForTask con timeout: si la tarea lanza, se reintenta", async () => {
+    const onTimeout = mock(() => {});
+    const fn = mock(({ signal, attempt }: { signal: AbortSignal; attempt: number }) => {
+      if (attempt === 2) return "ok";
+      return new Promise((_, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason)),
+      );
+    });
+    const result = await resilience({
+      attempts: 2,
+      timeout: 10,
+      waitForTask: true,
+      onTimeout,
+    }).attempt(fn);
+    expect(result).toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("hooks del ciclo de vida", () => {
   const recorder = () => {
     const log: string[] = [];
