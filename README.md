@@ -72,14 +72,26 @@ await recilience({
 }).attempt(({ signal }) => fetch(url, { signal }));
 ```
 
-Cancelar todo después de 10 s (incluidos los reintentos):
+### Timeout por intento vs. timeout total
+
+Hay dos formas de poner un límite de tiempo, y se pueden usar juntas:
+
+| | `timeout: ms` | `signal: AbortSignal.timeout(ms)` |
+| --- | --- | --- |
+| Qué limita | Cada intento por separado | Toda la ejecución, incluidos reintentos y esperas |
+| Al vencer | Aborta `control.signal` con `TimeoutError` | Aborta `control.signal` con el `reason` del signal (`TimeoutError`) |
+| ¿Se reintenta? | Sí, cuenta como un fallo más | No, `attempt` rechaza de inmediato |
 
 ```ts
 await recilience({
   attempts: 3,
-  signal: AbortSignal.timeout(10_000),
+  timeout: 2_000,                      // cada intento tiene como máximo 2 s
+  signal: AbortSignal.timeout(10_000), // y todo junto, como máximo 10 s
+  delay: 500,
 }).attempt(({ signal }) => fetch(url, { signal }));
 ```
+
+En ambos casos `control.signal` recibe el evento `abort`, así que basta con pasárselo a `fetch` o a la API que uses.
 
 Esperar 500 ms entre intentos:
 
