@@ -418,3 +418,104 @@ bun run build
 ## Licencia
 
 MIT
+
+## Guía: crear un decorador con `resilience`
+
+`resilience` no trae un decorador, pero se arma en pocas líneas. Esta guía usa los decoradores estándar de TypeScript 5 (sin `experimentalDecorators`), que también soporta Bun.
+
+### 1. El decorador
+
+El decorador recibe las opciones, crea el ejecutor una sola vez y reemplaza el método por uno que lo llama dentro de `attempt`. El `control` del intento se agrega como último argumento del método:
+
+```ts
+import { resilience, type Control, type ResilienceOptions } from "@jondotsoy/resilience";
+
+export function resilient<This>(
+  options: ResilienceOptions | ((self: This) => ResilienceOptions) = {},
+) {
+  return function <Args extends unknown[], R>(
+    method: (this: This, ...args: [...Args, Control?]) => R | Promise<R>,
+    _context: ClassMethodDecoratorContext<This>,
+  ) {
+    // Con opciones fijas, un solo ejecutor para todas las instancias.
+    const shared = typeof options === "function" ? undefined : resilience(options);
+
+    return function (this: This, ...args: Args): Promise<R> {
+      const r =
+        shared ?? resilience((options as (self: This) => ResilienceOptions)(this));
+      return r.attempt((control) => method.call(this, ...args, control));
+    };
+  };
+}
+```
+
+### 2. Usarlo en una clase
+
+Declara `control` como último parámetro y opcional. TypeScript no deja que un decorador cambie el tipo del método, así que para quien llama el parámetro sigue existiendo, pero no lo pasa: lo pone el decorador en cada intento.
+
+```ts
+class UsersApi {
+  @resilient({
+    attempts: 3,
+    timeout: 2_000,
+    delay: resilience.exponentialBackoff(200),
+  })
+  async getUser(id: string, control?: Control) {
+    const res = await fetch(`https://api.example.com/users/${id}`, {
+      signal: control?.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+}
+
+const user = await new UsersApi().getUser("42");
+```
+
+Con `control` el método puede cancelar el `fetch` cuando vence el `timeout` y leer `control.attempt` o `control.lastError` si los necesita.
+
+### 3. Opciones por instancia
+
+Si cada objeto tiene su propio `AbortController` (por ejemplo, para cancelar todo al cerrar el servicio), pasa una función que reciba la instancia. En ese caso el ejecutor se crea en cada llamada:
+
+```ts
+class Worker {
+  readonly abort = new AbortController();
+
+  @resilient((self: Worker) => ({ attempts: 3, signal: self.abort.signal }))
+  async process(job: Job, control?: Control) {
+    // ...
+  }
+
+  close() {
+    this.abort.abort();
+  }
+}
+```
+
+### 4. Agregar políticas con estado
+
+Las políticas como `circuitBreaker` o `bulkhead` se usan dentro del método con `execute`. Si las creas fuera de la clase, todas las instancias las comparten, que es lo habitual para un cliente de un mismo servicio:
+
+```ts
+const breaker = resilience.circuitBreaker({ failureThreshold: 5 });
+
+class PaymentsApi {
+  @resilient({ attempts: 3, delay: resilience.exponentialBackoff(200) })
+  async charge(order: Order, control?: Control) {
+    return breaker.execute(() =>
+      fetch("https://payments.example.com/charge", {
+        method: "POST",
+        body: JSON.stringify(order),
+        signal: control?.signal,
+      }),
+    );
+  }
+}
+```
+
+### Ten en cuenta
+
+- El `control` va siempre al final, después de los argumentos que pasó quien llama. Si el método tiene parámetros opcionales antes de `control` y se omiten, el `control` quedaría en otra posición. Prefiere parámetros fijos o un objeto de opciones.
+- Con opciones fijas, la configuración se comparte entre todas las instancias de la clase.
+- El decorador devuelve siempre una promesa, aunque el método original sea síncrono.
