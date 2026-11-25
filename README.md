@@ -1,17 +1,17 @@
-# @jondotsoy/recilience
+# @jondotsoy/resilience
 
 Ejecuta una función con reintentos y cancelación mediante `AbortSignal`. Sin dependencias.
 
 ```sh
-npm install @jondotsoy/recilience
+npm install @jondotsoy/resilience
 ```
 
 ## Uso
 
 ```ts
-import { recilience } from "@jondotsoy/recilience";
+import { resilience } from "@jondotsoy/resilience";
 
-const res = await recilience({ attempts: 3 }).attempt(({ signal }) =>
+const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
   fetch("https://api.example.com/data", { signal }),
 );
 ```
@@ -19,7 +19,7 @@ const res = await recilience({ attempts: 3 }).attempt(({ signal }) =>
 ### Sintaxis
 
 ```ts
-recilience(options).attempt((control) => T | Promise<T>): Promise<T>
+resilience(options).attempt((control) => T | Promise<T>): Promise<T>
 ```
 
 ## Opciones
@@ -64,7 +64,7 @@ La función recibe un objeto `control` en cada intento:
 Notificar los reintentos:
 
 ```ts
-await recilience({
+await resilience({
   attempts: 5,
   onRetry: ({ attempt, attempts, error }) => {
     console.warn(`Reintento ${attempt}/${attempts}`, error);
@@ -83,7 +83,7 @@ Hay dos formas de poner un límite de tiempo, y se pueden usar juntas:
 | ¿Se reintenta? | Sí, cuenta como un fallo más | No, `attempt` rechaza de inmediato |
 
 ```ts
-await recilience({
+await resilience({
   attempts: 3,
   timeout: 2_000,                      // cada intento tiene como máximo 2 s
   signal: AbortSignal.timeout(10_000), // y todo junto, como máximo 10 s
@@ -96,7 +96,7 @@ En ambos casos `control.signal` recibe el evento `abort`, así que basta con pas
 Esperar 500 ms entre intentos:
 
 ```ts
-await recilience({ attempts: 3, delay: 500 }).attempt(task);
+await resilience({ attempts: 3, delay: 500 }).attempt(task);
 ```
 
 Timeout de 2 s por intento, solo reintentar errores de servidor:
@@ -108,7 +108,7 @@ class HttpError extends Error {
   }
 }
 
-await recilience({
+await resilience({
   attempts: 3,
   timeout: 2_000,
   retryable: (error) => !(error instanceof HttpError) || error.status >= 500,
@@ -131,9 +131,9 @@ Helpers listos para la opción `delay`. Todos aceptan `{ maxDelay, jitter }`, do
 | `fibonacciBackoff(ms)`              | 100, 100, 200, 300, 500, ... |
 
 ```ts
-import { recilience, exponentialBackoff } from "@jondotsoy/recilience";
+import { resilience, exponentialBackoff } from "@jondotsoy/resilience";
 
-await recilience({
+await resilience({
   attempts: 5,
   delay: exponentialBackoff(200, { maxDelay: 5_000, jitter: "full" }),
   onRetry: ({ attempt, delay }) => console.warn(`Reintento ${attempt} en ${delay} ms`),
@@ -142,32 +142,32 @@ await recilience({
 
 También puedes pasar tu propia función: `delay: ({ attempt, error }) => ...`.
 
-Todas las utilidades (backoffs, políticas y errores) también están colgadas de la función `recilience`, así que basta con un solo import:
+Todas las utilidades (backoffs, políticas y errores) también están colgadas de la función `resilience`, así que basta con un solo import:
 
 ```ts
-import { recilience } from "@jondotsoy/recilience";
+import { resilience } from "@jondotsoy/resilience";
 
-await recilience({
+await resilience({
   attempts: 5,
-  delay: recilience.exponentialBackoff(200, { maxDelay: 5_000 }),
+  delay: resilience.exponentialBackoff(200, { maxDelay: 5_000 }),
 }).attempt(task);
 
-const breaker = recilience.circuitBreaker({ failureThreshold: 3 });
+const breaker = resilience.circuitBreaker({ failureThreshold: 3 });
 ```
 
 ## Políticas con estado
 
-Además de `recilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `recilience`.
+Además de `resilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `resilience`.
 
 ### fallback
 
 Devuelve un valor alternativo si la tarea falla.
 
 ```ts
-import { fallback, recilience } from "@jondotsoy/recilience";
+import { fallback, resilience } from "@jondotsoy/resilience";
 
 const user = await fallback(
-  () => recilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
+  () => resilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
   (error) => anonymousUser,
 );
 ```
@@ -252,7 +252,7 @@ const getData = () =>
   fallback(
     () =>
       breaker.execute(() =>
-        recilience({ attempts: 3, timeout: 2_000, delay: exponentialBackoff(200) }).attempt(
+        resilience({ attempts: 3, timeout: 2_000, delay: exponentialBackoff(200) }).attempt(
           ({ signal }) => pool.execute(() => fetch(url, { signal }), { signal }),
         ),
       ),

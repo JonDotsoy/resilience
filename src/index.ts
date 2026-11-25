@@ -54,7 +54,7 @@ export interface DelayContext {
   readonly error: unknown;
 }
 
-export interface RecilienceOptions {
+export interface ResilienceOptions {
   /** Número de intentos antes de rechazar. Por defecto `1`. */
   attempts?: number;
   /** Signal para cancelar la ejecución y los reintentos pendientes. */
@@ -90,7 +90,7 @@ export interface RetryableContext {
   readonly attempts: number;
 }
 
-export interface Recilience {
+export interface Resilience {
   attempt<T>(fn: (control: Control) => T | Promise<T>): Promise<T>;
 }
 
@@ -127,11 +127,11 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
  * Crea un ejecutor con reintentos.
  *
  * @example
- * const res = await recilience({ attempts: 3 }).attempt(({ signal }) =>
+ * const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
  *   fetch("https://example.com", { signal }),
  * );
  */
-const createRecilience = (options: RecilienceOptions = {}): Recilience => {
+const createResilience = (options: ResilienceOptions = {}): Resilience => {
   const attempts = options.attempts ?? 1;
   if (!Number.isInteger(attempts) || attempts < 1) {
     throw new RangeError(
@@ -213,15 +213,15 @@ const createRecilience = (options: RecilienceOptions = {}): Recilience => {
 
 /**
  * Crea un ejecutor con reintentos. Las utilidades también están disponibles
- * como propiedades, por ejemplo `recilience.exponentialBackoff(200)`.
+ * como propiedades, por ejemplo `resilience.exponentialBackoff(200)`.
  *
  * @example
- * const res = await recilience({
+ * const res = await resilience({
  *   attempts: 3,
- *   delay: recilience.exponentialBackoff(200),
+ *   delay: resilience.exponentialBackoff(200),
  * }).attempt(({ signal }) => fetch("https://example.com", { signal }));
  */
-export const recilience = Object.assign(createRecilience, {
+export const resilience = Object.assign(createResilience, {
   fixedBackoff,
   linearBackoff,
   exponentialBackoff,
@@ -246,4 +246,4 @@ export * from "./throttle.js";
 export * from "./cache.js";
 export * from "./dedupe.js";
 
-export default recilience;
+export default resilience;

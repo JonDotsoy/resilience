@@ -3,7 +3,7 @@
  *
  * @example
  * const user = await fallback(
- *   () => recilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
+ *   () => resilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
  *   () => anonymousUser,
  * );
  */

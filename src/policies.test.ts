@@ -8,7 +8,7 @@ import {
   circuitBreaker,
   dedupe,
   fallback,
-  recilience,
+  resilience,
   throttle,
 } from "./index.js";
 
@@ -38,10 +38,10 @@ describe("fallback", () => {
     expect(await fallback(fail("x"), handler)).toBe("x");
   });
 
-  test("se combina con recilience", async () => {
+  test("se combina con resilience", async () => {
     const fn = mock(fail());
     const result = await fallback(
-      () => recilience({ attempts: 3 }).attempt(fn),
+      () => resilience({ attempts: 3 }).attempt(fn),
       () => "default",
     );
     expect(result).toBe("default");
@@ -264,13 +264,13 @@ describe("dedupe", () => {
 });
 
 describe("composición", () => {
-  test("breaker + recilience + bulkhead", async () => {
+  test("breaker + resilience + bulkhead", async () => {
     const breaker = circuitBreaker({ failureThreshold: 1 });
     const pool = bulkhead({ maxConcurrent: 2 });
     const fn = mock(fail());
     const call = () =>
       breaker.execute(() =>
-        recilience({ attempts: 2 }).attempt(() => pool.execute(fn)),
+        resilience({ attempts: 2 }).attempt(() => pool.execute(fn)),
       );
     await expect(call()).rejects.toThrow("boom");
     expect(fn).toHaveBeenCalledTimes(2);
