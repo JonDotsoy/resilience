@@ -1,3 +1,21 @@
+import {
+  exponentialBackoff,
+  fibonacciBackoff,
+  fixedBackoff,
+  linearBackoff,
+} from "./backoff.js";
+import { fallback } from "./fallback.js";
+import { circuitBreaker } from "./circuit-breaker.js";
+import { bulkhead } from "./bulkhead.js";
+import { throttle } from "./throttle.js";
+import { cache } from "./cache.js";
+import { dedupe } from "./dedupe.js";
+import {
+  BulkheadRejectedError,
+  CircuitOpenError,
+  ThrottleError,
+} from "./errors.js";
+
 /**
  * Información que recibe la función en cada intento.
  */
@@ -113,7 +131,7 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
  *   fetch("https://example.com", { signal }),
  * );
  */
-export const recilience = (options: RecilienceOptions = {}): Recilience => {
+const createRecilience = (options: RecilienceOptions = {}): Recilience => {
   const attempts = options.attempts ?? 1;
   if (!Number.isInteger(attempts) || attempts < 1) {
     throw new RangeError(
@@ -192,6 +210,32 @@ export const recilience = (options: RecilienceOptions = {}): Recilience => {
     },
   };
 };
+
+/**
+ * Crea un ejecutor con reintentos. Las utilidades también están disponibles
+ * como propiedades, por ejemplo `recilience.exponentialBackoff(200)`.
+ *
+ * @example
+ * const res = await recilience({
+ *   attempts: 3,
+ *   delay: recilience.exponentialBackoff(200),
+ * }).attempt(({ signal }) => fetch("https://example.com", { signal }));
+ */
+export const recilience = Object.assign(createRecilience, {
+  fixedBackoff,
+  linearBackoff,
+  exponentialBackoff,
+  fibonacciBackoff,
+  fallback,
+  circuitBreaker,
+  bulkhead,
+  throttle,
+  cache,
+  dedupe,
+  CircuitOpenError,
+  BulkheadRejectedError,
+  ThrottleError,
+});
 
 export * from "./backoff.js";
 export * from "./errors.js";

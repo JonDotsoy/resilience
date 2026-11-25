@@ -359,3 +359,38 @@ describe("recilience", () => {
     expect(() => recilience({ attempts: 1.5 })).toThrow(RangeError);
   });
 });
+
+describe("utilidades en recilience.*", () => {
+  test("los helpers están disponibles como propiedades", () => {
+    expect(recilience.exponentialBackoff).toBe(exponentialBackoff);
+    for (const name of [
+      "fixedBackoff",
+      "linearBackoff",
+      "exponentialBackoff",
+      "fibonacciBackoff",
+      "fallback",
+      "circuitBreaker",
+      "bulkhead",
+      "throttle",
+      "cache",
+      "dedupe",
+      "CircuitOpenError",
+      "BulkheadRejectedError",
+      "ThrottleError",
+    ] as const) {
+      expect(typeof recilience[name]).toBe("function");
+    }
+  });
+
+  test("recilience.exponentialBackoff se usa en delay", async () => {
+    const delays: number[] = [];
+    await recilience({
+      attempts: 3,
+      delay: recilience.exponentialBackoff(1),
+      onRetry: ({ delay }) => void delays.push(delay),
+    }).attempt(({ attempt }) => {
+      if (attempt < 3) throw new Error();
+    });
+    expect(delays).toEqual([1, 2]);
+  });
+});

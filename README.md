@@ -142,6 +142,19 @@ await recilience({
 
 También puedes pasar tu propia función: `delay: ({ attempt, error }) => ...`.
 
+Todas las utilidades (backoffs, políticas y errores) también están colgadas de la función `recilience`, así que basta con un solo import:
+
+```ts
+import { recilience } from "@jondotsoy/recilience";
+
+await recilience({
+  attempts: 5,
+  delay: recilience.exponentialBackoff(200, { maxDelay: 5_000 }),
+}).attempt(task);
+
+const breaker = recilience.circuitBreaker({ failureThreshold: 3 });
+```
+
 ## Políticas con estado
 
 Además de `recilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `recilience`.
