@@ -1,0 +1,91 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Incremento de versión antes de publicar
+        type: choice
+        options: [none, patch, minor, major]
+        default: patch
+      tag:
+        description: dist-tag de npm
+        type: choice
+        options: [latest, demo, beta, alpha]
+        default: latest
+      provenance:
+        description: Publicar con provenance
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # commit, tag y release de GitHub
+  id-token: write # trusted publishing (OIDC) y provenance, sin NPM_TOKEN
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # `npm stage` existe desde npm 11.20.
+      - run: npm install -g npm@^11.20.0
+
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
+      - name: Incrementar versión
+        if: inputs.version != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version ${{ inputs.version }} -m "chore: release v%s"
+
+      - run: bun run build
+
+      # Staged publish: la versión queda en staging y no se publica hasta que
+      # alguien la apruebe con `npm stage approve <stage-id> --otp=<código>`.
+      - name: Stage publish de dist/
+        run: |
+          set -o pipefail
+          npm stage publish ./dist --access public --tag ${{ inputs.tag }} --provenance=${{ inputs.provenance }} 2>&1 | tee stage.log
+          VERSION=$(node -p "require('./dist/package.json').version")
+          {
+            echo "### @jondotsoy/resilience@$VERSION en staging (tag \`${{ inputs.tag }}\`)"
+            echo
+            echo '```'
+            cat stage.log
+            echo '```'
+            echo
+            echo 'Para publicarla: `npm stage list @jondotsoy/resilience` y luego `npm stage approve <stage-id> --otp=<código>`.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir commit y tag de la versión
+        if: inputs.version != 'none'
+        run: git push --follow-tags
+
+      - name: Crear release en GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./dist/package.json').version")
+          npm pack ./dist
+          PRERELEASE=""
+          if [ "${{ inputs.tag }}" != "latest" ]; then PRERELEASE="--prerelease"; fi
+          gh release create "v$VERSION" ./*.tgz \
+            --title "v$VERSION" \
+            --target "$(git rev-parse HEAD)" \
+            --generate-notes \
+            $PRERELEASE
