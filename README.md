@@ -281,24 +281,28 @@ Además de `resilience`, la lib trae políticas que guardan estado entre llamada
 
 Tras `failureThreshold` fallos seguidos se **abre** y rechaza al instante con `CircuitOpenError`. Después de `resetTimeout` ms pasa a **half-open** y deja pasar una prueba: si funciona se **cierra**, si falla se vuelve a abrir.
 
-Cada punto es una llamada a `breaker.execute()` en el tiempo, con `failureThreshold: 3` y `resetTimeout: 10_000`:
+Dos consumidores, **A** y **B**, comparten el mismo breaker (`failureThreshold: 3`, `resetTimeout: 10_000`). Cada punto es una llamada a `breaker.execute()` en el tiempo:
 
 ```
- ●  ●  ✕  ●  ✕  ✕  ✕  ○  ○  ○  ○  ┊  ◐✕  ○  ○  ○  ┊  ◐●  ●  ●  ●
-└───── closed ─────────┘└── open ──┘   │   └── open ──┘   │   └─ closed ─┘
-          3 fallos seguidos ──┘ 10 s   half-open    10 s   half-open
-                                       (falla)             (funciona)
+         ┌───────── closed ─────────┐  ┌──── open ────┐  half  ┌─── open ───┐half  ┌ closed ┐
+tiempo → ─────────────────────────────────────────────────────────────────────────────────────→
+A        ●       ✕       ✕       ✕   │     ○       ○   ┊     │ ○       ○   ┊ ◐●  │     ●
+B            ●       ●       ✕       │ ○       ○       ┊ ◐✕  │     ○       ┊     │ ●
+fallos   0   0   1   0   1   2   3   │     10 s        ┊     │    10 s     ┊     │ 0   0
 
  ●  llamada exitosa         ✕  llamada fallida (cuenta para failureThreshold)
  ○  rechazada al instante con CircuitOpenError, sin llamar al servicio
  ◐  llamada de prueba en half-open
 ```
 
-- En **closed** se cuentan los fallos **seguidos**: el `●` después del primer `✕` reinicia el contador.
-- Al llegar a 3 `✕` seguidos se **abre**: durante `resetTimeout` todas las llamadas son `○`.
-- Pasado ese tiempo, la siguiente llamada es una **prueba** (`◐`). Mientras la prueba corre, las demás siguen rechazadas.
-  - Si la prueba falla (`◐✕`), vuelve a **open** por otros `resetTimeout` ms.
-  - Si la prueba funciona (`◐●`), vuelve a **closed** (con `successThreshold: 1`).
+- **El contador es compartido**: los fallos de A y de B suman juntos. El tercer fallo seguido (de A) abre el circuito para **los dos**.
+- **Un éxito de cualquiera reinicia el contador**: el `●` de B entre los fallos de A lo devuelve a 0.
+- En **open**, A y B reciben `○` durante `resetTimeout`: ninguno llama al servicio.
+- Pasado ese tiempo, **solo una llamada** hace la prueba (`◐`), venga de A o de B. Mientras corre, las demás siguen rechazadas.
+  - Aquí la primera prueba es de B y falla (`◐✕`): el circuito vuelve a **open** para ambos.
+  - La siguiente prueba es de A y funciona (`◐●`): el circuito se **cierra** y B también vuelve a llamar con normalidad.
+
+Por eso el breaker se crea **una vez por servicio** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, B seguiría golpeando un servicio caído que A ya detectó.
 
 ```mermaid
 stateDiagram-v2
