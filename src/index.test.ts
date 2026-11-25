@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { recilience, type RetryEvent } from "./index.js";
+import { exponentialBackoff, recilience, type RetryEvent } from "./index.js";
 
 describe("recilience", () => {
   test("devuelve el valor de la función", async () => {
@@ -197,6 +197,91 @@ describe("recilience", () => {
         throw new Error("x");
       }),
     ).rejects.toThrow(RangeError);
+  });
+
+  test("retryable false rechaza sin reintentar", async () => {
+    const fatal = new Error("401");
+    const fn = mock(() => {
+      throw fatal;
+    });
+    const retryable = mock((error: unknown) => error !== fatal);
+    await expect(
+      recilience({ attempts: 5, retryable }).attempt(fn),
+    ).rejects.toBe(fatal);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(retryable).toHaveBeenCalledWith(fatal, { attempt: 1, attempts: 5 });
+  });
+
+  test("retryable true sigue reintentando y puede ser async", async () => {
+    const fn = mock(({ attempt }: { attempt: number }) => {
+      if (attempt < 3) throw new Error("503");
+      return "ok";
+    });
+    const result = await recilience({
+      attempts: 3,
+      retryable: async () => true,
+    }).attempt(fn);
+    expect(result).toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+
+  test("retryable no se llama en el último intento", async () => {
+    const retryable = mock(() => true);
+    await expect(
+      recilience({ attempts: 2, retryable }).attempt(() => {
+        throw new Error("x");
+      }),
+    ).rejects.toThrow("x");
+    expect(retryable).toHaveBeenCalledTimes(1);
+  });
+
+  test("timeout aborta el signal del intento y falla con TimeoutError", async () => {
+    let signal: AbortSignal | undefined;
+    const error = await recilience({ timeout: 20 })
+      .attempt((control) => {
+        signal = control.signal;
+        return new Promise(() => {});
+      })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DOMException);
+    expect((error as DOMException).name).toBe("TimeoutError");
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("timeout se reintenta como cualquier otro fallo", async () => {
+    const fn = mock(async ({ attempt }: { attempt: number }) => {
+      if (attempt === 1) await Bun.sleep(100);
+      return attempt;
+    });
+    expect(await recilience({ attempts: 2, timeout: 20 }).attempt(fn)).toBe(2);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test("timeout no afecta a un intento que termina a tiempo", async () => {
+    let signal: AbortSignal | undefined;
+    await recilience({ timeout: 20 }).attempt((control) => {
+      signal = control.signal;
+      return 1;
+    });
+    await Bun.sleep(40);
+    expect(signal?.aborted).toBe(false);
+  });
+
+  test("delay acepta helpers de backoff", async () => {
+    const events: RetryEvent[] = [];
+    await recilience({
+      attempts: 4,
+      delay: exponentialBackoff(1),
+      onRetry: (e) => void events.push(e),
+    }).attempt(({ attempt }) => {
+      if (attempt < 4) throw new Error();
+    });
+    expect(events.map((e) => e.delay)).toEqual([1, 2, 4]);
+  });
+
+  test("valida timeout", () => {
+    expect(() => recilience({ timeout: 0 })).toThrow(RangeError);
+    expect(() => recilience({ timeout: -1 })).toThrow(RangeError);
   });
 
   test("valida attempts", () => {
