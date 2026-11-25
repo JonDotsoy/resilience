@@ -537,6 +537,76 @@ describe("waitForTask", () => {
   });
 });
 
+describe("escenarios timeout / signal / waitForTask", () => {
+  // Escala: 1 s → 20 ms, 5 s → 100 ms.
+  const ONE_SECOND = 20;
+  const FIVE_SECONDS = 100;
+
+  // Tarea de "5 s" que ignora el signal y devuelve un valor al terminar.
+  const task5s = () => {
+    const state = { runs: 0, finished: 0 };
+    const fn = mock(async ({ attempt }: { attempt: number }) => {
+      state.runs++;
+      await Bun.sleep(FIVE_SECONDS);
+      state.finished++;
+      return `valor del intento ${attempt}`;
+    });
+    return { fn, state };
+  };
+
+  test("attempts 5 + timeout 1s: TimeoutError y la tarea se ejecuta 5 veces", async () => {
+    const { fn } = task5s();
+    const error = await resilience({ attempts: 5, timeout: ONE_SECOND })
+      .attempt(fn)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DOMException);
+    expect((error as DOMException).name).toBe("TimeoutError");
+    expect(fn).toHaveBeenCalledTimes(5);
+  });
+
+  test("signal AbortSignal.timeout(1s): rechaza con signal.reason y la tarea sigue ejecutándose", async () => {
+    const { fn, state } = task5s();
+    const signal = AbortSignal.timeout(ONE_SECOND);
+    const start = performance.now();
+    const error = await resilience({ signal })
+      .attempt(fn)
+      .catch((e: unknown) => e);
+
+    expect(error).toBe(signal.reason);
+    expect((error as DOMException).name).toBe("TimeoutError");
+    expect(performance.now() - start).toBeLessThan(FIVE_SECONDS);
+    // La tarea sigue corriendo después de que attempt rechazó...
+    expect(state.finished).toBe(0);
+    // ...y termina por su cuenta.
+    await Bun.sleep(FIVE_SECONDS);
+    expect(state.finished).toBe(1);
+  });
+
+  test("signal AbortSignal.timeout(1s) + waitForTask: devuelve el valor de la tarea tras 5s", async () => {
+    const { fn } = task5s();
+    const start = performance.now();
+    const result = await resilience({
+      signal: AbortSignal.timeout(ONE_SECOND),
+      waitForTask: true,
+    }).attempt(fn);
+    expect(result).toBe("valor del intento 1");
+    expect(performance.now() - start).toBeGreaterThanOrEqual(FIVE_SECONDS - 5);
+  });
+
+  test("attempts 5 + timeout 1s + waitForTask: devuelve el valor de la tarea (comportamiento conocido)", async () => {
+    // Comportamiento conocido: con waitForTask la tarea que ignora el signal
+    // termina bien, así que ese intento cuenta como éxito y no se reintenta.
+    const { fn } = task5s();
+    const result = await resilience({
+      attempts: 5,
+      timeout: ONE_SECOND,
+      waitForTask: true,
+    }).attempt(fn);
+    expect(result).toBe("valor del intento 1");
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("hooks del ciclo de vida", () => {
   const recorder = () => {
     const log: string[] = [];
