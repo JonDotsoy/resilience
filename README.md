@@ -538,8 +538,11 @@ const getDataSafe = () =>
 bun install
 bun test
 bun run typecheck
-bun run build
+bun run build   # compila y prepara dist/ como paquete (package.json, README, LICENSE)
+bun run pack    # build + npm pack ./dist → jondotsoy-resilience-<versión>.tgz
 ```
+
+Para publicar: `npm publish ./dist`.
 
 ## Licencia
 
