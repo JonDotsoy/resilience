@@ -542,7 +542,7 @@ bun run build   # compila y prepara dist/ como paquete (package.json, README, LI
 bun run pack    # build + npm pack ./dist → jondotsoy-resilience-<versión>.tgz
 ```
 
-Para publicar se usa el workflow **Publish** (GitHub Actions, manual). Incrementa la versión (`none`, `patch`, `minor` o `major`), corre typecheck y tests, arma `dist/` y lo deja en staging con `npm stage publish ./dist` usando trusted publishing (OIDC), sin `NPM_TOKEN`. Al terminar sube el commit y el tag `vX.Y.Z` a la rama desde la que se lanzó.
+Para publicar se usa el workflow **Publish** (GitHub Actions, manual). Incrementa la versión (`none`, `patch`, `minor` o `major`), corre typecheck y tests, arma `dist/` y lo deja en staging con `npm stage publish ./dist` usando trusted publishing (OIDC), sin `NPM_TOKEN`. Al terminar sube el commit y el tag `vX.Y.Z` a la rama desde la que se lanzó, y crea el release `vX.Y.Z` en GitHub con notas generadas y el `.tgz` adjunto (como prerelease si el tag no es `latest`).
 
 La versión no queda publicada hasta aprobarla con 2FA:
 

@@ -19,7 +19,7 @@ on:
         default: true
 
 permissions:
-  contents: write # commit y tag del incremento de versión
+  contents: write # commit, tag y release de GitHub
   id-token: write # trusted publishing (OIDC) y provenance, sin NPM_TOKEN
 
 concurrency:
@@ -75,3 +75,17 @@ jobs:
       - name: Subir commit y tag de la versión
         if: inputs.version != 'none'
         run: git push --follow-tags
+
+      - name: Crear release en GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./dist/package.json').version")
+          npm pack ./dist
+          PRERELEASE=""
+          if [ "${{ inputs.tag }}" != "latest" ]; then PRERELEASE="--prerelease"; fi
+          gh release create "v$VERSION" ./*.tgz \
+            --title "v$VERSION" \
+            --target "$(git rev-parse HEAD)" \
+            --generate-notes \
+            $PRERELEASE
