@@ -248,6 +248,51 @@ describe("recilience", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  test("timeout dispara el evento abort en control.signal", async () => {
+    const onAbort = mock((_event: Event) => {});
+    let reason: unknown;
+    await expect(
+      recilience({ timeout: 20 }).attempt(({ signal }) => {
+        signal.addEventListener("abort", (event) => {
+          reason = signal.reason;
+          onAbort(event);
+        });
+        return new Promise(() => {});
+      }),
+    ).rejects.toThrow();
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onAbort.mock.calls[0]![0].type).toBe("abort");
+    expect(reason).toBeInstanceOf(DOMException);
+    expect((reason as DOMException).name).toBe("TimeoutError");
+  });
+
+  test("timeout aborta un fetch lento mediante control.signal", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: async () => {
+        await Bun.sleep(500);
+        return new Response("tarde");
+      },
+    });
+    try {
+      const signals: AbortSignal[] = [];
+      const start = performance.now();
+      const error = await recilience({ attempts: 2, timeout: 50 })
+        .attempt(async ({ signal }) => {
+          signals.push(signal);
+          const res = await fetch(server.url, { signal });
+          return res.text();
+        })
+        .catch((e: unknown) => e);
+      expect((error as DOMException).name).toBe("TimeoutError");
+      expect(signals).toHaveLength(2);
+      expect(signals.every((s) => s.aborted)).toBe(true);
+      expect(performance.now() - start).toBeLessThan(400);
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("timeout se reintenta como cualquier otro fallo", async () => {
     const fn = mock(async ({ attempt }: { attempt: number }) => {
       if (attempt === 1) await Bun.sleep(100);

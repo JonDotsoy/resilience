@@ -130,6 +130,111 @@ await recilience({
 
 También puedes pasar tu propia función: `delay: ({ attempt, error }) => ...`.
 
+## Políticas con estado
+
+Además de `recilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `recilience`.
+
+### fallback
+
+Devuelve un valor alternativo si la tarea falla.
+
+```ts
+import { fallback, recilience } from "@jondotsoy/recilience";
+
+const user = await fallback(
+  () => recilience({ attempts: 3 }).attempt(({ signal }) => getUser(id, signal)),
+  (error) => anonymousUser,
+);
+```
+
+### circuitBreaker
+
+Tras `failureThreshold` fallos seguidos se **abre** y rechaza al instante con `CircuitOpenError`. Después de `resetTimeout` ms pasa a **half-open** y deja pasar una prueba: si funciona se **cierra**, si falla se vuelve a abrir.
+
+| Opción             | Por defecto | Descripción                                        |
+| ------------------ | ----------- | -------------------------------------------------- |
+| `failureThreshold` | `5`         | Fallos seguidos que abren el circuito.             |
+| `resetTimeout`     | `30_000`    | Ms abierto antes de probar de nuevo.               |
+| `successThreshold` | `1`         | Éxitos en half-open para cerrarlo.                 |
+| `isFailure`        | todos       | `(error) => boolean`, qué errores cuentan como fallo. |
+| `onStateChange`    | —           | `(state, previous) => void`.                       |
+
+```ts
+const breaker = circuitBreaker({ failureThreshold: 5, resetTimeout: 10_000 });
+
+await breaker.execute(() => fetch(url));
+breaker.state; // "closed" | "open" | "half-open"
+breaker.reset();
+```
+
+### bulkhead
+
+Limita cuántas llamadas corren en paralelo. Si no hay cupo ni espacio en la cola, lanza `BulkheadRejectedError`.
+
+```ts
+const pool = bulkhead({ maxConcurrent: 5, maxQueue: 20 });
+
+await pool.execute(() => fetch(url), { signal }); // signal cancela la espera en cola
+pool.running; // en curso
+pool.queued;  // esperando
+```
+
+### throttle
+
+Limita la cantidad de llamadas en una ventana deslizante. Al superarla lanza `ThrottleError`, con `retryAfter` en ms.
+
+```ts
+const limiter = throttle({ limit: 10, interval: 1_000 }); // 10 por segundo
+
+await limiter.execute(() => fetch(url));
+limiter.remaining;
+```
+
+### cache
+
+Guarda en memoria el resultado por `ttl` ms. No guarda errores. Las llamadas simultáneas con la misma key comparten la ejecución.
+
+```ts
+const users = cache({ ttl: 60_000, maxSize: 500 });
+
+await users.execute(`user:${id}`, () => getUser(id));
+users.delete(`user:${id}`);
+users.clear();
+```
+
+### dedupe
+
+Si ya hay una llamada en curso con la misma key, devuelve esa misma promesa.
+
+```ts
+const inFlight = dedupe();
+
+const [a, b] = await Promise.all([
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig), // no vuelve a llamar a loadConfig
+]);
+```
+
+### Combinarlas
+
+El orden de anidación define el comportamiento. Por ejemplo, un breaker por fuera hace que toda la secuencia de reintentos cuente como una sola llamada:
+
+```ts
+const breaker = circuitBreaker({ failureThreshold: 3 });
+const pool = bulkhead({ maxConcurrent: 10 });
+
+const getData = () =>
+  fallback(
+    () =>
+      breaker.execute(() =>
+        recilience({ attempts: 3, timeout: 2_000, delay: exponentialBackoff(200) }).attempt(
+          ({ signal }) => pool.execute(() => fetch(url, { signal }), { signal }),
+        ),
+      ),
+    () => cachedData,
+  );
+```
+
 ## Desarrollo
 
 ```sh

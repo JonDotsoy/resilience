@@ -194,5 +194,12 @@ export const recilience = (options: RecilienceOptions = {}): Recilience => {
 };
 
 export * from "./backoff.js";
+export * from "./errors.js";
+export * from "./fallback.js";
+export * from "./circuit-breaker.js";
+export * from "./bulkhead.js";
+export * from "./throttle.js";
+export * from "./cache.js";
+export * from "./dedupe.js";
 
 export default recilience;
