@@ -212,6 +212,31 @@ describe("recilience", () => {
     expect(retryable).toHaveBeenCalledWith(fatal, { attempt: 1, attempts: 5 });
   });
 
+  test("retryable false: el error de attempt se captura con try/catch", async () => {
+    class HttpError extends Error {
+      constructor(public status: number) {
+        super(`HTTP ${status}`);
+      }
+    }
+    const original = new HttpError(401);
+    const fn = mock(() => {
+      throw original;
+    });
+
+    let caught: unknown;
+    try {
+      await recilience({ attempts: 3, retryable: () => false }).attempt(fn);
+      throw new Error("no debería llegar aquí");
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(original);
+    expect(caught).toBeInstanceOf(HttpError);
+    expect((caught as HttpError).status).toBe(401);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   test("retryable true sigue reintentando y puede ser async", async () => {
     const fn = mock(({ attempt }: { attempt: number }) => {
       if (attempt < 3) throw new Error("503");
