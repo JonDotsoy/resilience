@@ -281,6 +281,35 @@ Además de `resilience`, la lib trae políticas que guardan estado entre llamada
 
 Tras `failureThreshold` fallos seguidos se **abre** y rechaza al instante con `CircuitOpenError`. Después de `resetTimeout` ms pasa a **half-open** y deja pasar una prueba: si funciona se **cierra**, si falla se vuelve a abrir.
 
+Cada punto es una llamada a `breaker.execute()` en el tiempo, con `failureThreshold: 3` y `resetTimeout: 10_000`:
+
+```
+ ●  ●  ✕  ●  ✕  ✕  ✕  ○  ○  ○  ○  ┊  ◐✕  ○  ○  ○  ┊  ◐●  ●  ●  ●
+└───── closed ─────────┘└── open ──┘   │   └── open ──┘   │   └─ closed ─┘
+          3 fallos seguidos ──┘ 10 s   half-open    10 s   half-open
+                                       (falla)             (funciona)
+
+ ●  llamada exitosa         ✕  llamada fallida (cuenta para failureThreshold)
+ ○  rechazada al instante con CircuitOpenError, sin llamar al servicio
+ ◐  llamada de prueba en half-open
+```
+
+- En **closed** se cuentan los fallos **seguidos**: el `●` después del primer `✕` reinicia el contador.
+- Al llegar a 3 `✕` seguidos se **abre**: durante `resetTimeout` todas las llamadas son `○`.
+- Pasado ese tiempo, la siguiente llamada es una **prueba** (`◐`). Mientras la prueba corre, las demás siguen rechazadas.
+  - Si la prueba falla (`◐✕`), vuelve a **open** por otros `resetTimeout` ms.
+  - Si la prueba funciona (`◐●`), vuelve a **closed** (con `successThreshold: 1`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> closed
+    closed --> open: failureThreshold fallos seguidos
+    open --> half_open: pasa resetTimeout
+    half_open --> closed: successThreshold éxitos
+    half_open --> open: la prueba falla
+    closed --> closed: éxito (reinicia el contador)
+```
+
 | Opción             | Por defecto | Descripción                                        |
 | ------------------ | ----------- | -------------------------------------------------- |
 | `failureThreshold` | `5`         | Fallos seguidos que abren el circuito.             |
