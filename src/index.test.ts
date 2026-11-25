@@ -564,6 +564,28 @@ describe("escenarios timeout / signal / waitForTask", () => {
     expect(fn).toHaveBeenCalledTimes(5);
   });
 
+  test("attempts 5 + timeout 1s: cada intento recibe un signal abortado con reason TimeoutError", async () => {
+    const signals: AbortSignal[] = [];
+    const reasons: unknown[] = [];
+    await resilience({ attempts: 5, timeout: ONE_SECOND })
+      .attempt(async ({ signal }) => {
+        signals.push(signal);
+        signal.addEventListener("abort", () => reasons.push(signal.reason));
+        await Bun.sleep(FIVE_SECONDS);
+      })
+      .catch(() => {});
+
+    expect(signals).toHaveLength(5);
+    expect(new Set(signals).size).toBe(5); // un signal nuevo por intento
+    expect(reasons).toHaveLength(5);
+    for (const [i, signal] of signals.entries()) {
+      expect(signal.aborted).toBe(true);
+      expect(signal.reason).toBe(reasons[i]);
+      expect(signal.reason).toBeInstanceOf(DOMException);
+      expect((signal.reason as DOMException).name).toBe("TimeoutError");
+    }
+  });
+
   test("signal AbortSignal.timeout(1s): rechaza con signal.reason y la tarea sigue ejecutándose", async () => {
     const { fn, state } = task5s();
     const signal = AbortSignal.timeout(ONE_SECOND);
