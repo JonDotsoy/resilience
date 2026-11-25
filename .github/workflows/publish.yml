@@ -1,0 +1,61 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Incremento de versión antes de publicar
+        type: choice
+        options: [none, patch, minor, major]
+        default: patch
+      tag:
+        description: dist-tag de npm
+        type: choice
+        options: [latest, demo, beta, alpha]
+        default: latest
+      provenance:
+        description: Publicar con provenance
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # commit y tag del incremento de versión
+  id-token: write # trusted publishing (OIDC) con npm, sin NPM_TOKEN
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      # Node 24 trae npm 11, necesario para trusted publishing.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
+      - name: Incrementar versión
+        if: inputs.version != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version ${{ inputs.version }} -m "chore: release v%s"
+
+      - run: bun run build
+
+      - name: Publicar dist/
+        run: npm publish ./dist --access public --tag ${{ inputs.tag }} --provenance=${{ inputs.provenance }}
+
+      - name: Subir commit y tag de la versión
+        if: inputs.version != 'none'
+        run: git push --follow-tags

@@ -542,7 +542,11 @@ bun run build   # compila y prepara dist/ como paquete (package.json, README, LI
 bun run pack    # build + npm pack ./dist → jondotsoy-resilience-<versión>.tgz
 ```
 
-Para publicar: `npm publish ./dist`.
+Para publicar se usa el workflow **Publish** (GitHub Actions, manual). Incrementa la versión (`none`, `patch`, `minor` o `major`), corre typecheck y tests, arma `dist/` y publica con `npm publish ./dist` usando trusted publishing (OIDC), sin `NPM_TOKEN`. Al terminar sube el commit y el tag `vX.Y.Z` a la rama desde la que se lanzó.
+
+```sh
+gh workflow run Publish --ref develop -f version=patch -f tag=latest -f provenance=true
+```
 
 ## Licencia
 
