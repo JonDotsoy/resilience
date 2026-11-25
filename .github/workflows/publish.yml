@@ -20,7 +20,7 @@ on:
 
 permissions:
   contents: write # commit y tag del incremento de versión
-  id-token: write # trusted publishing (OIDC) con npm, sin NPM_TOKEN
+  id-token: write # trusted publishing (OIDC) y provenance, sin NPM_TOKEN
 
 concurrency:
   group: publish
@@ -34,11 +34,13 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      # Node 24 trae npm 11, necesario para trusted publishing.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      # `npm stage` existe desde npm 11.20.
+      - run: npm install -g npm@^11.20.0
 
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
@@ -53,8 +55,22 @@ jobs:
 
       - run: bun run build
 
-      - name: Publicar dist/
-        run: npm publish ./dist --access public --tag ${{ inputs.tag }} --provenance=${{ inputs.provenance }}
+      # Staged publish: la versión queda en staging y no se publica hasta que
+      # alguien la apruebe con `npm stage approve <stage-id> --otp=<código>`.
+      - name: Stage publish de dist/
+        run: |
+          set -o pipefail
+          npm stage publish ./dist --access public --tag ${{ inputs.tag }} --provenance=${{ inputs.provenance }} 2>&1 | tee stage.log
+          VERSION=$(node -p "require('./dist/package.json').version")
+          {
+            echo "### @jondotsoy/resilience@$VERSION en staging (tag \`${{ inputs.tag }}\`)"
+            echo
+            echo '```'
+            cat stage.log
+            echo '```'
+            echo
+            echo 'Para publicarla: `npm stage list @jondotsoy/resilience` y luego `npm stage approve <stage-id> --otp=<código>`.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Subir commit y tag de la versión
         if: inputs.version != 'none'
