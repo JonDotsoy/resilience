@@ -575,14 +575,24 @@ describe("escenarios timeout / signal / waitForTask", () => {
       })
       .catch(() => {});
 
+    // Referencia: el reason que produce AbortSignal.timeout(1s).
+    const native = AbortSignal.timeout(ONE_SECOND);
+    await new Promise((r) => native.addEventListener("abort", r, { once: true }));
+    const expected = native.reason as DOMException;
+
     expect(signals).toHaveLength(5);
     expect(new Set(signals).size).toBe(5); // un signal nuevo por intento
     expect(reasons).toHaveLength(5);
     for (const [i, signal] of signals.entries()) {
       expect(signal.aborted).toBe(true);
       expect(signal.reason).toBe(reasons[i]);
-      expect(signal.reason).toBeInstanceOf(DOMException);
-      expect((signal.reason as DOMException).name).toBe("TimeoutError");
+      // Equivalente a AbortSignal.timeout(): mismo tipo, name y code.
+      // (El message no se compara: cada runtime usa un texto distinto.)
+      const reason = signal.reason as DOMException;
+      expect(reason).toBeInstanceOf(DOMException);
+      expect(reason.constructor).toBe(expected.constructor);
+      expect(reason.name).toBe(expected.name); // "TimeoutError"
+      expect(reason.code).toBe(expected.code); // 23
     }
   });
 
