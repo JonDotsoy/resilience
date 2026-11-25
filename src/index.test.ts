@@ -62,8 +62,8 @@ describe("recilience", () => {
       },
     );
     expect(events).toEqual([
-      { attempt: 2, attempts: 3, error: errors[0] },
-      { attempt: 3, attempts: 3, error: errors[1] },
+      { attempt: 2, attempts: 3, error: errors[0], delay: 0 },
+      { attempt: 3, attempts: 3, error: errors[1], delay: 0 },
     ]);
   });
 
@@ -140,6 +140,63 @@ describe("recilience", () => {
     } finally {
       server.stop(true);
     }
+  });
+
+  test("delay espera los ms indicados entre intentos", async () => {
+    const times: number[] = [];
+    await recilience({ attempts: 3, delay: 30 }).run(({ attempt }) => {
+      times.push(performance.now());
+      if (attempt < 3) throw new Error();
+    });
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(25);
+    expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(25);
+  });
+
+  test("delay no espera antes del primer intento", async () => {
+    const start = performance.now();
+    await recilience({ attempts: 3, delay: 200 }).run(() => 1);
+    expect(performance.now() - start).toBeLessThan(100);
+  });
+
+  test("delay como función recibe el contexto y onRetry recibe el valor", async () => {
+    const delay = mock(({ attempt }: { attempt: number }) => attempt * 5);
+    const events: RetryEvent[] = [];
+    await recilience({
+      attempts: 3,
+      delay,
+      onRetry: (e) => void events.push(e),
+    }).run(({ attempt }) => {
+      if (attempt < 3) throw new Error(`e${attempt}`);
+    });
+    expect(delay).toHaveBeenCalledTimes(2);
+    expect(events.map((e) => [e.attempt, e.delay])).toEqual([
+      [2, 10],
+      [3, 15],
+    ]);
+  });
+
+  test("abortar durante el delay rechaza de inmediato", async () => {
+    const ac = new AbortController();
+    const fn = mock(() => {
+      throw new Error("falla");
+    });
+    setTimeout(() => ac.abort(new Error("cancelado")), 10);
+    const start = performance.now();
+    await expect(
+      recilience({ attempts: 3, delay: 5_000, signal: ac.signal }).run(fn),
+    ).rejects.toThrow("cancelado");
+    expect(performance.now() - start).toBeLessThan(1_000);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test("valida delay", async () => {
+    expect(() => recilience({ delay: -1 })).toThrow(RangeError);
+    expect(() => recilience({ delay: Number.NaN })).toThrow(RangeError);
+    await expect(
+      recilience({ attempts: 2, delay: () => -5 }).run(() => {
+        throw new Error("x");
+      }),
+    ).rejects.toThrow(RangeError);
   });
 
   test("valida attempts", () => {

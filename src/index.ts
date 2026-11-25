@@ -22,6 +22,18 @@ export interface RetryEvent {
   readonly attempts: number;
   /** Error que provocó el reintento. */
   readonly error: unknown;
+  /** Milisegundos que se esperarán antes de reejecutar. */
+  readonly delay: number;
+}
+
+/** Datos para calcular la espera antes de un reintento. */
+export interface DelayContext {
+  /** Número del intento que está por ejecutarse (2, 3, ...). */
+  readonly attempt: number;
+  /** Total de intentos permitidos. */
+  readonly attempts: number;
+  /** Error que provocó el reintento. */
+  readonly error: unknown;
 }
 
 export interface RecilienceOptions {
@@ -29,7 +41,12 @@ export interface RecilienceOptions {
   attempts?: number;
   /** Signal para cancelar la ejecución y los reintentos pendientes. */
   signal?: AbortSignal;
-  /** Se llama cada vez que la función se va a reejecutar. */
+  /**
+   * Milisegundos a esperar entre intentos. Puede ser un número fijo o una
+   * función para calcularlo (por ejemplo, backoff exponencial). Por defecto `0`.
+   */
+  delay?: number | ((context: DelayContext) => number);
+  /** Se llama cada vez que la función se va a reejecutar, antes de la espera. */
   onRetry?: (event: RetryEvent) => void | Promise<void>;
 }
 
@@ -39,6 +56,29 @@ export interface Recilience {
 
 const abortReason = (signal: AbortSignal): unknown =>
   signal.reason ?? new DOMException("This operation was aborted", "AbortError");
+
+const assertDelay = (ms: number): number => {
+  if (!Number.isFinite(ms) || ms < 0) {
+    throw new RangeError(`delay must be a finite number >= 0, received ${ms}`);
+  }
+  return ms;
+};
+
+/** Espera `ms` milisegundos; rechaza de inmediato si se aborta el signal. */
+const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(abortReason(signal));
+    if (ms <= 0) return resolve();
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal!));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 
 /**
  * Crea un ejecutor con reintentos.
@@ -55,7 +95,8 @@ export const recilience = (options: RecilienceOptions = {}): Recilience => {
       `options.attempts must be an integer >= 1, received ${attempts}`,
     );
   }
-  const { signal: parentSignal, onRetry } = options;
+  const { signal: parentSignal, onRetry, delay = 0 } = options;
+  if (typeof delay === "number") assertDelay(delay);
 
   return {
     async run<T>(fn: (control: Control) => T | Promise<T>): Promise<T> {
@@ -64,8 +105,13 @@ export const recilience = (options: RecilienceOptions = {}): Recilience => {
       for (let attempt = 1; attempt <= attempts; attempt++) {
         if (parentSignal?.aborted) throw abortReason(parentSignal);
 
-        if (attempt > 1 && onRetry) {
-          await onRetry({ attempt, attempts, error: lastError });
+        if (attempt > 1) {
+          const context = { attempt, attempts, error: lastError };
+          const ms = assertDelay(
+            typeof delay === "function" ? delay(context) : delay,
+          );
+          if (onRetry) await onRetry({ ...context, delay: ms });
+          await sleep(ms, parentSignal);
           if (parentSignal?.aborted) throw abortReason(parentSignal);
         }
 

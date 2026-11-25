@@ -28,13 +28,17 @@ recilience(options).run((control) => T | Promise<T>): Promise<T>
 | ---------- | -------------------------------------------- | ----------- | ------------------------------------------------------------------ |
 | `attempts` | `number`                                     | `1`         | Número de intentos antes de rechazar. Debe ser un entero `>= 1`.   |
 | `signal`   | `AbortSignal`                                | —           | Cancela el intento en curso y los reintentos pendientes.            |
-| `onRetry`  | `(event: RetryEvent) => void \| Promise<void>` | —           | Se llama antes de cada reejecución. Si devuelve una promesa, se espera. |
+| `delay`    | `number \| (ctx: DelayContext) => number`     | `0`         | Milisegundos a esperar entre intentos. Con una función puedes calcularlo por intento. La espera se cancela si se aborta `signal`. |
+| `onRetry`  | `(event: RetryEvent) => void \| Promise<void>` | —           | Se llama antes de cada reejecución (antes de la espera). Si devuelve una promesa, se espera. |
 
 `RetryEvent` contiene:
 
 - `attempt`: número del intento que está por ejecutarse (2, 3, ...).
 - `attempts`: total de intentos permitidos.
 - `error`: error que provocó el reintento.
+- `delay`: milisegundos que se esperarán antes de reejecutar.
+
+`DelayContext` contiene `attempt`, `attempts` y `error`.
 
 ## Control
 
@@ -49,7 +53,8 @@ La función recibe un objeto `control` en cada intento:
 
 - Si la función se resuelve, `run` devuelve ese valor y no hay más intentos.
 - Si falla en todos los intentos, `run` rechaza con el error del último intento.
-- Si `options.signal` se aborta, `run` rechaza con `signal.reason` y no reintenta.
+- Entre un intento fallido y el siguiente: se llama `onRetry`, luego se espera `delay` ms.
+- Si `options.signal` se aborta (incluso durante la espera), `run` rechaza con `signal.reason` y no reintenta.
 
 ## Ejemplos
 
@@ -73,12 +78,19 @@ await recilience({
 }).run(({ signal }) => fetch(url, { signal }));
 ```
 
-Esperar entre reintentos usando `onRetry`:
+Esperar 500 ms entre intentos:
+
+```ts
+await recilience({ attempts: 3, delay: 500 }).run(task);
+```
+
+Backoff exponencial (200 ms, 400 ms, 800 ms, ...):
 
 ```ts
 await recilience({
-  attempts: 3,
-  onRetry: ({ attempt }) => new Promise((r) => setTimeout(r, 2 ** attempt * 100)),
+  attempts: 5,
+  delay: ({ attempt }) => 100 * 2 ** (attempt - 1),
+  onRetry: ({ attempt, delay }) => console.warn(`Reintento ${attempt} en ${delay} ms`),
 }).run(task);
 ```
 
