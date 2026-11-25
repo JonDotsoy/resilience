@@ -593,9 +593,9 @@ describe("escenarios timeout / signal / waitForTask", () => {
     expect(performance.now() - start).toBeGreaterThanOrEqual(FIVE_SECONDS - 5);
   });
 
-  test("attempts 5 + timeout 1s + waitForTask: devuelve el valor de la tarea (comportamiento conocido)", async () => {
-    // Comportamiento conocido: con waitForTask la tarea que ignora el signal
-    // termina bien, así que ese intento cuenta como éxito y no se reintenta.
+  test("attempts 5 + timeout 1s + waitForTask: devuelve el valor del primer intento si no falla", async () => {
+    // Con waitForTask, el primer intento termina bien aunque venció su
+    // timeout, así que cuenta como éxito y no se reintenta.
     const { fn } = task5s();
     const result = await resilience({
       attempts: 5,
@@ -604,6 +604,20 @@ describe("escenarios timeout / signal / waitForTask", () => {
     }).attempt(fn);
     expect(result).toBe("valor del intento 1");
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+  test("attempts 5 + timeout 1s + waitForTask: si el primer intento falla, se reintenta", async () => {
+    const fn = mock(async ({ attempt }: { attempt: number }) => {
+      await Bun.sleep(FIVE_SECONDS);
+      if (attempt === 1) throw new Error("falló el intento 1");
+      return `valor del intento ${attempt}`;
+    });
+    const result = await resilience({
+      attempts: 5,
+      timeout: ONE_SECOND,
+      waitForTask: true,
+    }).attempt(fn);
+    expect(result).toBe("valor del intento 2");
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });
 
