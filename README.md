@@ -164,6 +164,41 @@ const result = await resilience({ timeout: 1_000, waitForTask: true }).attempt(
 // → lo que devuelva la tarea; si la tarea lanza, `attempt` rechaza (o reintenta, en un timeout).
 ```
 
+#### Qué pasa en cada combinación
+
+| Configuración | Al vencer / abortarse | Si la tarea **termina bien** después | Si la tarea **lanza** después | ¿Reintenta? | ¿`fallback`? |
+| --- | --- | --- | --- | --- | --- |
+| `timeout` | Rechaza en el momento con `TimeoutError` | Se ignora su valor | Se ignora su error | Sí | Sí, si se agotan los intentos |
+| `timeout` + `waitForTask: true` | Aborta `control.signal` y espera | `attempt` devuelve ese valor (éxito) | Cuenta como fallo del intento | Sí | Sí, si se agotan los intentos |
+| `signal` | Rechaza en el momento con `signal.reason` | Se ignora su valor | Se ignora su error | No | No |
+| `signal` + `waitForTask: true` | Aborta `control.signal` y espera | `attempt` devuelve ese valor (éxito) | `attempt` rechaza con el error de la tarea | No | No |
+
+#### `signal: AbortSignal.timeout(10_000)` + `waitForTask: true`
+
+```ts
+const result = await resilience({
+  attempts: 3,
+  delay: 1_000,
+  signal: AbortSignal.timeout(10_000),
+  waitForTask: true,
+}).attempt(async ({ signal }) => {
+  signal.addEventListener("abort", () => {
+    // A los 10 s: signal.reason es un TimeoutError.
+  });
+  return await longTask(signal);
+});
+```
+
+A los 10 s, contados desde que se creó el signal (no desde cada intento):
+
+1. **Si hay un intento corriendo**, se aborta su `control.signal` con el `TimeoutError` y `attempt` **espera** a que la tarea termine:
+   - Si la tarea devuelve un valor, `attempt` resuelve con ese valor. Se llama `onSuccess` y `onSettled` con `status: "success"`.
+   - Si la tarea lanza, `attempt` rechaza con **ese error** (no con el `TimeoutError`). No se reintenta ni se usa `fallback`; se llama `onAbort` y `onSettled` con `status: "aborted"`.
+2. **Si está esperando entre intentos** (`delay`), no hay tarea que esperar: `attempt` rechaza en el momento con el `TimeoutError` y no hace más intentos.
+3. **Si el signal ya estaba abortado** antes de llamar a `attempt`, rechaza sin ejecutar la tarea.
+
+En resumen: `waitForTask` solo cambia si se espera a la tarea **que está corriendo**; un signal abortado nunca deja empezar un intento nuevo.
+
 Esperar 500 ms entre intentos:
 
 ```ts

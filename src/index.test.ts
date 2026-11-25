@@ -625,6 +625,46 @@ describe("escenarios timeout / signal / waitForTask", () => {
     expect(performance.now() - start).toBeGreaterThanOrEqual(FIVE_SECONDS - 5);
   });
 
+  test("signal + waitForTask: si la tarea lanza, rechaza con ese error sin reintentar ni fallback", async () => {
+    const fallback = mock(() => "fallback");
+    const settled = mock((_e: { status: string }) => {});
+    const fn = mock(async () => {
+      await Bun.sleep(FIVE_SECONDS);
+      throw new Error("error de la tarea");
+    });
+    await expect(
+      resilience({
+        attempts: 5,
+        signal: AbortSignal.timeout(ONE_SECOND),
+        waitForTask: true,
+        fallback,
+        onSettled: settled,
+      }).attempt(fn),
+    ).rejects.toThrow("error de la tarea");
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(settled.mock.calls[0]![0].status).toBe("aborted");
+  });
+
+  test("signal + waitForTask: si vence durante el delay, rechaza en el momento con signal.reason", async () => {
+    const signal = AbortSignal.timeout(ONE_SECOND);
+    const fn = mock(() => {
+      throw new Error("falla rápido");
+    });
+    const start = performance.now();
+    const error = await resilience({
+      attempts: 5,
+      delay: FIVE_SECONDS * 10,
+      signal,
+      waitForTask: true,
+    })
+      .attempt(fn)
+      .catch((e: unknown) => e);
+    expect(error).toBe(signal.reason);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(performance.now() - start).toBeLessThan(FIVE_SECONDS);
+  });
+
   test("attempts 5 + timeout 1s + waitForTask: devuelve el valor del primer intento si no falla", async () => {
     // Con waitForTask, el primer intento termina bien aunque venció su
     // timeout, así que cuenta como éxito y no se reintenta.
