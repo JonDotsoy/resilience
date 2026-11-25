@@ -447,6 +447,154 @@ describe("fallback", () => {
   });
 });
 
+describe("hooks del ciclo de vida", () => {
+  const recorder = () => {
+    const log: string[] = [];
+    const hooks = {
+      onStart: ({ attempt, attempts }: { attempt: number; attempts: number }) =>
+        void log.push(`start ${attempt}/${attempts}`),
+      onAttempt: ({ attempt }: { attempt: number }) => void log.push(`attempt ${attempt}`),
+      onTimeout: ({ attempt, timeout }: { attempt: number; timeout: number }) =>
+        void log.push(`timeout ${attempt} ${timeout}ms`),
+      onError: (e: unknown, { attempt, willRetry }: { attempt: number; willRetry: boolean }) =>
+        void log.push(`error ${attempt} ${(e as Error).message} retry=${willRetry}`),
+      onRetry: ({ attempt }: { attempt: number }) => void log.push(`retry ${attempt}`),
+      onSuccess: (v: unknown, { attempt }: { attempt: number }) =>
+        void log.push(`success ${attempt} ${v}`),
+      onFailure: (e: unknown, { attempt }: { attempt: number }) =>
+        void log.push(`failure ${attempt} ${(e as Error).message}`),
+      onAbort: (r: unknown) => void log.push(`abort ${(r as Error).message}`),
+      onSettled: (e: { status: string; attempt: number }) =>
+        void log.push(`settled ${e.status} ${e.attempt}`),
+    };
+    return { log, hooks };
+  };
+
+  test("orden en un éxito tras un reintento", async () => {
+    const { log, hooks } = recorder();
+    await resilience({ attempts: 3, ...hooks }).attempt(({ attempt }) => {
+      if (attempt === 1) throw new Error("e1");
+      return "ok";
+    });
+    expect(log).toEqual([
+      "start 0/3",
+      "attempt 1",
+      "error 1 e1 retry=true",
+      "retry 2",
+      "attempt 2",
+      "success 2 ok",
+      "settled success 2",
+    ]);
+  });
+
+  test("orden en un fallo definitivo", async () => {
+    const { log, hooks } = recorder();
+    await expect(
+      resilience({ attempts: 2, ...hooks }).attempt(({ attempt }) => {
+        throw new Error(`e${attempt}`);
+      }),
+    ).rejects.toThrow("e2");
+    expect(log).toEqual([
+      "start 0/2",
+      "attempt 1",
+      "error 1 e1 retry=true",
+      "retry 2",
+      "attempt 2",
+      "error 2 e2 retry=false",
+      "failure 2 e2",
+      "settled failure 2",
+    ]);
+  });
+
+  test("retryable false marca willRetry=false", async () => {
+    const { log, hooks } = recorder();
+    await expect(
+      resilience({ attempts: 3, retryable: () => false, ...hooks }).attempt(() => {
+        throw new Error("401");
+      }),
+    ).rejects.toThrow("401");
+    expect(log).toContain("error 1 401 retry=false");
+    expect(log).toContain("failure 1 401");
+  });
+
+  test("onTimeout se llama antes de onError", async () => {
+    const { log, hooks } = recorder();
+    await expect(
+      resilience({ timeout: 10, ...hooks }).attempt(() => new Promise(() => {})),
+    ).rejects.toThrow();
+    expect(log.slice(1, 4)).toEqual([
+      "attempt 1",
+      "timeout 1 10ms",
+      "error 1 The attempt timed out after 10 ms retry=false",
+    ]);
+  });
+
+  test("con fallback, onSettled recibe status fallback y el valor", async () => {
+    const settled = mock((_e: unknown) => {});
+    const onFailure = mock(() => {});
+    const result = await resilience({
+      fallback: () => "default",
+      onFailure,
+      onSettled: settled,
+    }).attempt(() => {
+      throw new Error("x");
+    });
+    expect(result).toBe("default");
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(settled.mock.calls[0]![0]).toMatchObject({
+      status: "fallback",
+      value: "default",
+      attempt: 1,
+      attempts: 1,
+    });
+  });
+
+  test("al abortar se llama onAbort y onSettled aborted, no onFailure", async () => {
+    const { log, hooks } = recorder();
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(new Error("cancelado")), 5);
+    await expect(
+      resilience({ signal: ac.signal, ...hooks }).attempt(
+        ({ signal }) =>
+          new Promise((_, reject) =>
+            signal.addEventListener("abort", () => reject(signal.reason)),
+          ),
+      ),
+    ).rejects.toThrow("cancelado");
+    expect(log).toEqual([
+      "start 0/1",
+      "attempt 1",
+      "abort cancelado",
+      "settled aborted 1",
+    ]);
+  });
+
+  test("los hooks async se esperan", async () => {
+    const log: string[] = [];
+    await resilience({
+      onStart: async () => {
+        await Bun.sleep(5);
+        log.push("start");
+      },
+      onSuccess: async () => {
+        await Bun.sleep(5);
+        log.push("success");
+      },
+    }).attempt(() => void log.push("run"));
+    expect(log).toEqual(["start", "run", "success"]);
+  });
+
+  test("si un hook lanza, attempt rechaza con ese error", async () => {
+    await expect(
+      resilience({
+        onStart: () => {
+          throw new Error("hook");
+        },
+      }).attempt(() => 1),
+    ).rejects.toThrow("hook");
+  });
+});
+
 describe("utilidades en resilience.*", () => {
   test("los helpers están disponibles como propiedades", () => {
     expect(resilience.exponentialBackoff).toBe(exponentialBackoff);

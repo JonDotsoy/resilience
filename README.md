@@ -43,6 +43,41 @@ resilience(options).attempt((control) => T | Promise<T>): Promise<T>
 
 `DelayContext` contiene `attempt`, `attempts` y `error`.
 
+## Ciclo de vida
+
+Además de `onRetry`, las opciones aceptan hooks `on<Evento>` que se ejecutan en este orden:
+
+```
+onStart
+  └─ por cada intento: onAttempt → onTimeout? → onError? → onRetry?
+onSuccess | onFailure | onAbort
+onSettled
+```
+
+| Hook        | Argumentos                                         | Cuándo                                                                 |
+| ----------- | -------------------------------------------------- | ---------------------------------------------------------------------- |
+| `onStart`   | `{ attempt: 0, attempts }`                         | Antes del primer intento.                                              |
+| `onAttempt` | `{ attempt, attempts, lastError }`                 | Antes de ejecutar cada intento, incluido el primero.                   |
+| `onTimeout` | `{ attempt, attempts, timeout }`                   | Cuando vence el `timeout` de un intento (antes de `onError`).          |
+| `onError`   | `(error, { attempt, attempts, willRetry })`        | Cada vez que un intento falla. `willRetry` indica si habrá otro.       |
+| `onRetry`   | `{ attempt, attempts, error, delay }`              | Antes de reejecutar, antes de la espera.                               |
+| `onSuccess` | `(value, { attempt, attempts })`                   | Cuando un intento termina bien.                                        |
+| `onFailure` | `(error, { attempt, attempts })`                   | Cuando falla definitivamente, antes de `fallback`.                     |
+| `onAbort`   | `(reason, { attempt, attempts })`                  | Cuando se aborta `signal`. No se llama `onFailure` ni `fallback`.      |
+| `onSettled` | `{ status, attempt, attempts, value?, error? }`    | Siempre al final. `status`: `"success"`, `"fallback"`, `"failure"` o `"aborted"`. |
+
+Todos los hooks se esperan si devuelven una promesa. Si un hook lanza, `attempt` rechaza con ese error.
+
+```ts
+await resilience({
+  attempts: 3,
+  timeout: 2_000,
+  onAttempt: ({ attempt, attempts }) => console.log(`intento ${attempt}/${attempts}`),
+  onError: (error, { willRetry }) => console.warn("falló", error, { willRetry }),
+  onSettled: ({ status, attempt }) => metrics.record("fetch_user", { status, attempt }),
+}).attempt(({ signal }) => getUser(id, signal));
+```
+
 ## Control
 
 La función recibe un objeto `control` en cada intento:
