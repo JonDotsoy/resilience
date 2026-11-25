@@ -367,7 +367,9 @@ users.clear();
 
 ### dedupe
 
-Si ya hay una llamada en curso con la misma key, devuelve esa misma promesa.
+Si ya hay una llamada en curso con la misma `key`, devuelve esa misma promesa en vez de ejecutar `fn` otra vez. No guarda resultados: en cuanto la llamada termina (bien o con error) la key se libera y el siguiente pedido vuelve a llamar.
+
+Sirve cuando varios componentes piden lo mismo al mismo tiempo, por ejemplo la configuración al arrancar.
 
 ```ts
 const inFlight = dedupe();
