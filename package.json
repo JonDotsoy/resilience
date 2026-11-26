@@ -1,6 +1,6 @@
 {
   "name": "@jondotsoy/resilience",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Ejecuta una función con reintentos y cancelación vía AbortSignal.",
   "type": "module",
   "main": "./dist/index.js",
