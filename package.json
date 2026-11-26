@@ -1,7 +1,7 @@
 {
   "name": "@jondotsoy/resilience",
   "version": "0.1.2",
-  "description": "Ejecuta una función con reintentos y cancelación vía AbortSignal.",
+  "description": "Run a function with retries and cancellation through AbortSignal.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,13 +23,29 @@
     "pack": "npm run build && npm pack ./dist"
   },
   "keywords": [
-    "retry",
     "resilience",
+    "retry",
+    "backoff",
+    "exponential-backoff",
+    "circuit-breaker",
+    "bulkhead",
+    "throttle",
+    "rate-limit",
+    "timeout",
     "abort",
-    "signal",
-    "fetch"
+    "abortsignal",
+    "abort-controller",
+    "fallback",
+    "cache",
+    "dedupe",
+    "fault-tolerance",
+    "fetch",
+    "typescript"
   ],
-  "author": "JonDotsoy",
+  "author": {
+    "name": "Jona",
+    "url": "https://github.com/JonDotsoy"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
