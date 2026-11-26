@@ -262,7 +262,7 @@ describe("resilience", () => {
 
   test("timeout aborta el signal del intento y falla con TimeoutError", async () => {
     let signal: AbortSignal | undefined;
-    const error = await resilience({ timeout: 20 })
+    const error = await resilience({ waitForTask: false, timeout: 20 })
       .attempt((control) => {
         signal = control.signal;
         return new Promise(() => {});
@@ -277,7 +277,7 @@ describe("resilience", () => {
     const onAbort = mock((_event: Event) => {});
     let reason: unknown;
     await expect(
-      resilience({ timeout: 20 }).attempt(({ signal }) => {
+      resilience({ waitForTask: false, timeout: 20 }).attempt(({ signal }) => {
         signal.addEventListener("abort", (event) => {
           reason = signal.reason;
           onAbort(event);
@@ -323,7 +323,7 @@ describe("resilience", () => {
       if (attempt === 1) await Bun.sleep(100);
       return attempt;
     });
-    expect(await resilience({ attempts: 2, timeout: 20 }).attempt(fn)).toBe(2);
+    expect(await resilience({ waitForTask: false, attempts: 2, timeout: 20 }).attempt(fn)).toBe(2);
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
@@ -419,6 +419,7 @@ describe("fallback", () => {
     const result = await resilience({
       attempts: 2,
       timeout: 10,
+      waitForTask: false,
       fallback: (e) => (e as DOMException).name,
     }).attempt(() => new Promise(() => {}));
     expect(result).toBe("TimeoutError");
@@ -448,35 +449,50 @@ describe("fallback", () => {
 });
 
 describe("waitForTask", () => {
+  test("por defecto, si la tarea resuelve con un valor al recibir abort, attempt entrega ese valor", async () => {
+    const ac = new AbortController();
+    const { promise: listening, resolve: ready } = Promise.withResolvers<void>();
+    const pending = resilience({ signal: ac.signal }).attempt(
+      ({ signal }) =>
+        new Promise<string>((resolve) => {
+          signal.addEventListener("abort", () => resolve("resultado parcial"));
+          ready();
+        }),
+    );
+    await listening;
+    ac.abort();
+    expect(await pending).toBe("resultado parcial");
+  });
+
   // Tarea que ignora el signal y termina sola después de `ms`.
   const stubborn = (ms: number, value = "terminó") => async () => {
     await Bun.sleep(ms);
     return value;
   };
 
-  test("por defecto, timeout rechaza en el momento con TimeoutError", async () => {
+  test("waitForTask: false, timeout rechaza en el momento con TimeoutError", async () => {
     const start = performance.now();
-    const error = await resilience({ timeout: 20 })
+    const error = await resilience({ waitForTask: false, timeout: 20 })
       .attempt(stubborn(200))
       .catch((e: unknown) => e);
     expect((error as DOMException).name).toBe("TimeoutError");
     expect(performance.now() - start).toBeLessThan(150);
   });
 
-  test("por defecto, abortar signal rechaza en el momento aunque la tarea ignore el signal", async () => {
+  test("waitForTask: false, abortar signal rechaza en el momento aunque la tarea ignore el signal", async () => {
     const start = performance.now();
-    const error = await resilience({ signal: AbortSignal.timeout(20) })
+    const error = await resilience({ waitForTask: false, signal: AbortSignal.timeout(20) })
       .attempt(stubborn(200))
       .catch((e: unknown) => e);
     expect((error as DOMException).name).toBe("TimeoutError");
     expect(performance.now() - start).toBeLessThan(150);
   });
 
-  test("por defecto, un abort manual rechaza con su reason", async () => {
+  test("waitForTask: false, un abort manual rechaza con su reason", async () => {
     const ac = new AbortController();
     setTimeout(() => ac.abort(new Error("cancelado")), 10);
     await expect(
-      resilience({ signal: ac.signal }).attempt(stubborn(200)),
+      resilience({ waitForTask: false, signal: ac.signal }).attempt(stubborn(200)),
     ).rejects.toThrow("cancelado");
   });
 
@@ -554,9 +570,9 @@ describe("escenarios timeout / signal / waitForTask", () => {
     return { fn, state };
   };
 
-  test("attempts 5 + timeout 1s: TimeoutError y la tarea se ejecuta 5 veces", async () => {
+  test("attempts 5 + timeout 1s + waitForTask: false: TimeoutError y la tarea se ejecuta 5 veces", async () => {
     const { fn } = task5s();
-    const error = await resilience({ attempts: 5, timeout: ONE_SECOND })
+    const error = await resilience({ waitForTask: false, attempts: 5, timeout: ONE_SECOND })
       .attempt(fn)
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(DOMException);
@@ -564,10 +580,10 @@ describe("escenarios timeout / signal / waitForTask", () => {
     expect(fn).toHaveBeenCalledTimes(5);
   });
 
-  test("attempts 5 + timeout 1s: cada intento recibe un signal abortado con reason TimeoutError", async () => {
+  test("attempts 5 + timeout 1s + waitForTask: false: cada intento recibe un signal abortado con reason TimeoutError", async () => {
     const signals: AbortSignal[] = [];
     const reasons: unknown[] = [];
-    await resilience({ attempts: 5, timeout: ONE_SECOND })
+    await resilience({ waitForTask: false, attempts: 5, timeout: ONE_SECOND })
       .attempt(async ({ signal }) => {
         signals.push(signal);
         signal.addEventListener("abort", () => reasons.push(signal.reason));
@@ -596,11 +612,11 @@ describe("escenarios timeout / signal / waitForTask", () => {
     }
   });
 
-  test("signal AbortSignal.timeout(1s): rechaza con signal.reason y la tarea sigue ejecutándose", async () => {
+  test("signal AbortSignal.timeout(1s) + waitForTask: false: rechaza con signal.reason y la tarea sigue ejecutándose", async () => {
     const { fn, state } = task5s();
     const signal = AbortSignal.timeout(ONE_SECOND);
     const start = performance.now();
-    const error = await resilience({ signal })
+    const error = await resilience({ waitForTask: false, signal })
       .attempt(fn)
       .catch((e: unknown) => e);
 
@@ -766,7 +782,7 @@ describe("hooks del ciclo de vida", () => {
   test("onTimeout se llama antes de onError", async () => {
     const { log, hooks } = recorder();
     await expect(
-      resilience({ timeout: 10, ...hooks }).attempt(() => new Promise(() => {})),
+      resilience({ waitForTask: false, timeout: 10, ...hooks }).attempt(() => new Promise(() => {})),
     ).rejects.toThrow();
     expect(log.slice(1, 4)).toEqual([
       "attempt 1",

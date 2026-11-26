@@ -81,11 +81,11 @@ export interface ResilienceOptions<F = never> extends LifecycleHooks<F> {
   timeout?: number;
   /**
    * Qué hace `attempt` cuando se aborta `signal` o vence `timeout`:
-   * - `false` (por defecto): rechaza en ese momento con el motivo del abort
-   *   (`TimeoutError` para `timeout` y `AbortSignal.timeout()`), aunque la
-   *   tarea siga corriendo.
-   * - `true`: aborta `control.signal` pero espera a la tarea, y entrega lo que
-   *   la tarea devuelva o lance.
+   * - `true` (por defecto): aborta `control.signal` pero espera a la tarea, y
+   *   entrega lo que la tarea devuelva o lance.
+   * - `false`: rechaza en ese momento con el motivo del abort (`TimeoutError`
+   *   para `timeout` y `AbortSignal.timeout()`), aunque la tarea siga
+   *   corriendo.
    */
   waitForTask?: boolean;
   /**
@@ -234,7 +234,7 @@ const createResilience = <F = never>(
     timeout,
     fallback,
     delay = 0,
-    waitForTask = false,
+    waitForTask = true,
     onStart,
     onAttempt,
     onTimeout,
