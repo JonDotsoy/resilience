@@ -23,24 +23,13 @@
     "pack": "npm run build && npm pack ./dist"
   },
   "keywords": [
-    "resilience",
     "retry",
     "backoff",
-    "exponential-backoff",
     "circuit-breaker",
     "bulkhead",
-    "throttle",
-    "rate-limit",
     "timeout",
     "abort",
-    "abortsignal",
-    "abort-controller",
-    "fallback",
-    "cache",
-    "dedupe",
-    "fault-tolerance",
-    "fetch",
-    "typescript"
+    "fallback"
   ],
   "author": {
     "name": "Jonathan Delgado",
