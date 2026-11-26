@@ -1,6 +1,6 @@
 {
   "name": "@jondotsoy/resilience",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Run a function with retries and cancellation through AbortSignal.",
   "type": "module",
   "main": "./dist/index.js",
