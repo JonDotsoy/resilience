@@ -1,12 +1,12 @@
 # @jondotsoy/resilience
 
-Ejecuta una función con reintentos y cancelación mediante `AbortSignal`. Sin dependencias.
+Run a function with retries and cancellation through `AbortSignal`. Zero dependencies.
 
 ```sh
 npm install @jondotsoy/resilience
 ```
 
-## Uso
+## Usage
 
 ```ts
 import { resilience } from "@jondotsoy/resilience";
@@ -16,139 +16,139 @@ const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
 );
 ```
 
-### Sintaxis
+### Syntax
 
 ```ts
 resilience(options).attempt((control) => T | Promise<T>): Promise<T>
 ```
 
-## Opciones
+## Options
 
-| Opción     | Tipo                                         | Por defecto | Descripción                                                        |
+| Option     | Type                                         | Default     | Description                                                        |
 | ---------- | -------------------------------------------- | ----------- | ------------------------------------------------------------------ |
-| `attempts` | `number`                                     | `1`         | Número de intentos antes de rechazar. Debe ser un entero `>= 1`.   |
-| `signal`   | `AbortSignal`                                | —           | Cancela el intento en curso y los reintentos pendientes.            |
-| `delay`    | `number \| (ctx: DelayContext) => number`     | `0`         | Milisegundos a esperar entre intentos. Con una función puedes calcularlo por intento. La espera se cancela si se aborta `signal`. |
-| `onRetry`  | `(event: RetryEvent) => void \| Promise<void>` | —           | Se llama antes de cada reejecución (antes de la espera). Si devuelve una promesa, se espera. |
-| `retryable` | `(error, ctx: RetryableContext) => boolean \| Promise<boolean>` | reintenta todo | Si devuelve `false`, rechaza de inmediato con ese error sin reintentar. `ctx` tiene `attempt` (el que falló) y `attempts`. |
-| `timeout`  | `number`                                     | —           | Tiempo máximo en ms por intento. Al vencer aborta `control.signal` y el intento falla con `DOMException` `"TimeoutError"`, que se puede reintentar. |
-| `fallback` | `(lastError, ctx: FallbackContext) => F \| Promise<F>` | — | Se llama cuando la ejecución falla definitivamente. Lo que devuelva pasa a ser el resultado de `attempt` (el tipo queda `T \| F`). Si lanza, `attempt` rechaza con ese error. No se llama al abortar `signal`. `ctx` tiene `attempt` (intentos ejecutados) y `attempts`. |
-| `waitForTask` | `boolean` | `true` | Qué hace `attempt` al abortarse `signal` o vencer `timeout`. `true`: aborta `control.signal` y espera a la tarea, entregando lo que devuelva o lance. `false`: rechaza en ese momento (con `TimeoutError` en un timeout), aunque la tarea siga corriendo. |
+| `attempts` | `number`                                     | `1`         | Number of attempts before rejecting. Must be an integer `>= 1`.    |
+| `signal`   | `AbortSignal`                                | —           | Cancels the running attempt and any pending retries.               |
+| `delay`    | `number \| (ctx: DelayContext) => number`     | `0`         | Milliseconds to wait between attempts. Pass a function to compute it per attempt. The wait is cancelled if `signal` is aborted. |
+| `onRetry`  | `(event: RetryEvent) => void \| Promise<void>` | —           | Called before each retry (before the wait). If it returns a promise, it is awaited. |
+| `retryable` | `(error, ctx: RetryableContext) => boolean \| Promise<boolean>` | retries everything | If it returns `false`, rejects immediately with that error without retrying. `ctx` has `attempt` (the one that failed) and `attempts`. |
+| `timeout`  | `number`                                     | —           | Maximum time in ms per attempt. When it expires, `control.signal` is aborted and the attempt fails with a `DOMException` `"TimeoutError"`, which can be retried. |
+| `fallback` | `(lastError, ctx: FallbackContext) => F \| Promise<F>` | — | Called when the execution fails for good. Whatever it returns becomes the result of `attempt` (the type becomes `T \| F`). If it throws, `attempt` rejects with that error. Not called when `signal` is aborted. `ctx` has `attempt` (attempts executed) and `attempts`. |
+| `waitForTask` | `boolean` | `true` | What `attempt` does when `signal` is aborted or `timeout` expires. `true`: aborts `control.signal` and waits for the task, returning whatever it returns or throws. `false`: rejects right away (with `TimeoutError` on a timeout), even if the task keeps running. |
 
-`RetryEvent` contiene:
+`RetryEvent` contains:
 
-- `attempt`: número del intento que está por ejecutarse (2, 3, ...).
-- `attempts`: total de intentos permitidos.
-- `error`: error que provocó el reintento.
-- `delay`: milisegundos que se esperarán antes de reejecutar.
+- `attempt`: number of the attempt about to run (2, 3, ...).
+- `attempts`: total attempts allowed.
+- `error`: the error that caused the retry.
+- `delay`: milliseconds to wait before running again.
 
-`DelayContext` contiene `attempt`, `attempts` y `error`.
+`DelayContext` contains `attempt`, `attempts` and `error`.
 
-## Ciclo de vida
+## Lifecycle
 
-Además de `onRetry`, las opciones aceptan hooks `on<Evento>` que se ejecutan en este orden:
+Besides `onRetry`, the options accept `on<Event>` hooks that run in this order:
 
 ```
 onStart
-  └─ por cada intento: onAttempt → onTimeout? → onError? → onRetry?
+  └─ for each attempt: onAttempt → onTimeout? → onError? → onRetry?
 onSuccess | onFailure | onAbort
 onSettled
 ```
 
-| Hook        | Argumentos                                         | Cuándo                                                                 |
+| Hook        | Arguments                                          | When                                                                   |
 | ----------- | -------------------------------------------------- | ---------------------------------------------------------------------- |
-| `onStart`   | `{ attempt: 0, attempts }`                         | Antes del primer intento.                                              |
-| `onAttempt` | `{ attempt, attempts, lastError }`                 | Antes de ejecutar cada intento, incluido el primero.                   |
-| `onTimeout` | `{ attempt, attempts, timeout }`                   | Cuando vence el `timeout` de un intento (antes de `onError`).          |
-| `onError`   | `(error, { attempt, attempts, willRetry })`        | Cada vez que un intento falla. `willRetry` indica si habrá otro.       |
-| `onRetry`   | `{ attempt, attempts, error, delay }`              | Antes de reejecutar, antes de la espera.                               |
-| `onSuccess` | `(value, { attempt, attempts })`                   | Cuando un intento termina bien.                                        |
-| `onFailure` | `(error, { attempt, attempts })`                   | Cuando falla definitivamente, antes de `fallback`.                     |
-| `onAbort`   | `(reason, { attempt, attempts })`                  | Cuando se aborta `signal`. No se llama `onFailure` ni `fallback`.      |
-| `onSettled` | `{ status, attempt, attempts, value?, error? }`    | Siempre al final. `status`: `"success"`, `"fallback"`, `"failure"` o `"aborted"`. |
+| `onStart`   | `{ attempt: 0, attempts }`                         | Before the first attempt.                                              |
+| `onAttempt` | `{ attempt, attempts, lastError }`                 | Before running each attempt, including the first.                      |
+| `onTimeout` | `{ attempt, attempts, timeout }`                   | When an attempt's `timeout` expires (before `onError`).                |
+| `onError`   | `(error, { attempt, attempts, willRetry })`        | Every time an attempt fails. `willRetry` tells whether another follows. |
+| `onRetry`   | `{ attempt, attempts, error, delay }`              | Before running again, before the wait.                                 |
+| `onSuccess` | `(value, { attempt, attempts })`                   | When an attempt succeeds.                                              |
+| `onFailure` | `(error, { attempt, attempts })`                   | When it fails for good, before `fallback`.                             |
+| `onAbort`   | `(reason, { attempt, attempts })`                  | When `signal` is aborted. Neither `onFailure` nor `fallback` is called. |
+| `onSettled` | `{ status, attempt, attempts, value?, error? }`    | Always, at the end. `status`: `"success"`, `"fallback"`, `"failure"` or `"aborted"`. |
 
-Todos los hooks se esperan si devuelven una promesa. Si un hook lanza, `attempt` rechaza con ese error.
+Every hook is awaited if it returns a promise. If a hook throws, `attempt` rejects with that error.
 
 ```ts
 await resilience({
   attempts: 3,
   timeout: 2_000,
-  onAttempt: ({ attempt, attempts }) => console.log(`intento ${attempt}/${attempts}`),
-  onError: (error, { willRetry }) => console.warn("falló", error, { willRetry }),
+  onAttempt: ({ attempt, attempts }) => console.log(`attempt ${attempt}/${attempts}`),
+  onError: (error, { willRetry }) => console.warn("failed", error, { willRetry }),
   onSettled: ({ status, attempt }) => metrics.record("fetch_user", { status, attempt }),
 }).attempt(({ signal }) => getUser(id, signal));
 ```
 
 ## Control
 
-La función recibe un objeto `control` en cada intento:
+The function receives a `control` object on each attempt:
 
-- `signal`: `AbortSignal` del intento. Pásalo a `fetch` o a cualquier API cancelable. Se aborta cuando se aborta `options.signal` o cuando vence `options.timeout`.
-- `attempt`: número del intento actual, empezando en 1.
-- `attempts`: total de intentos permitidos.
-- `lastError`: error del intento anterior (o `undefined` en el primero).
+- `signal`: the attempt's `AbortSignal`. Pass it to `fetch` or any cancellable API. It is aborted when `options.signal` is aborted or when `options.timeout` expires.
+- `attempt`: number of the current attempt, starting at 1.
+- `attempts`: total attempts allowed.
+- `lastError`: error from the previous attempt (or `undefined` on the first one).
 
-## Comportamiento
+## Behavior
 
-- Si la función se resuelve, `attempt` devuelve ese valor y no hay más intentos.
-- Si `retryable` devuelve `false`, rechaza con ese error sin más intentos.
-- Si hay `fallback`, cualquier fallo definitivo (intentos agotados o `retryable` en `false`) se resuelve con lo que devuelva el fallback.
-- Si falla en todos los intentos sin `fallback`, `attempt` rechaza con el error del último intento.
-- Entre un intento fallido y el siguiente: se llama `onRetry`, luego se espera `delay` ms.
-- Si `options.signal` se aborta durante un intento, se aborta `control.signal`, `attempt` espera a la tarea y entrega su resultado o su error, sin reintentar. Si se aborta durante la espera entre intentos, rechaza en ese momento con `signal.reason`. Con `waitForTask: false`, rechaza siempre en el momento con `signal.reason`.
+- If the function resolves, `attempt` returns that value and no more attempts run.
+- If `retryable` returns `false`, it rejects with that error without further attempts.
+- If there is a `fallback`, any final failure (attempts exhausted or `retryable` returning `false`) resolves with whatever the fallback returns.
+- If every attempt fails and there is no `fallback`, `attempt` rejects with the error from the last attempt.
+- Between a failed attempt and the next one: `onRetry` is called, then it waits `delay` ms.
+- If `options.signal` is aborted during an attempt, `control.signal` is aborted, `attempt` waits for the task and returns its result or its error, without retrying. If it is aborted during the wait between attempts, it rejects right away with `signal.reason`. With `waitForTask: false`, it always rejects right away with `signal.reason`.
 
-## Ejemplos
+## Examples
 
-Notificar los reintentos:
+Report retries:
 
 ```ts
 await resilience({
   attempts: 5,
   onRetry: ({ attempt, attempts, error }) => {
-    console.warn(`Reintento ${attempt}/${attempts}`, error);
+    console.warn(`Retry ${attempt}/${attempts}`, error);
   },
 }).attempt(({ signal }) => fetch(url, { signal }));
 ```
 
-### Timeout por intento vs. timeout total
+### Per-attempt timeout vs. total timeout
 
-Hay dos formas de poner un límite de tiempo, y se pueden usar juntas:
+There are two ways to set a time limit, and they can be combined:
 
 | | `timeout: ms` | `signal: AbortSignal.timeout(ms)` |
 | --- | --- | --- |
-| Qué limita | Cada intento por separado | Toda la ejecución, incluidos reintentos y esperas |
-| Al vencer | Aborta `control.signal` con `TimeoutError` | Aborta `control.signal` con el `reason` del signal (`TimeoutError`) |
-| ¿Se reintenta? | Sí, cuenta como un fallo más | No, `attempt` rechaza de inmediato |
+| What it limits | Each attempt separately | The whole execution, including retries and waits |
+| When it expires | Aborts `control.signal` with `TimeoutError` | Aborts `control.signal` with the signal's `reason` (`TimeoutError`) |
+| Retried? | Yes, it counts as one more failure | No, `attempt` rejects immediately |
 
 ```ts
 await resilience({
   attempts: 3,
-  timeout: 2_000,                      // cada intento tiene como máximo 2 s
-  signal: AbortSignal.timeout(10_000), // y todo junto, como máximo 10 s
+  timeout: 2_000,                      // each attempt takes at most 2 s
+  signal: AbortSignal.timeout(10_000), // and everything together, at most 10 s
   delay: 500,
 }).attempt(({ signal }) => fetch(url, { signal }));
 ```
 
-En ambos casos `control.signal` recibe el evento `abort`, así que basta con pasárselo a `fetch` o a la API que uses.
+In both cases `control.signal` receives the `abort` event, so passing it to `fetch` or whatever API you use is enough.
 
-### ¿Esperar a la tarea o no? (`waitForTask`)
+### Wait for the task or not? (`waitForTask`)
 
-Abortar solo **avisa** a la tarea: si la tarea ignora `control.signal`, puede seguir corriendo. `waitForTask` decide qué hace el `await` de `.attempt()`:
+Aborting only **notifies** the task: if the task ignores `control.signal`, it may keep running. `waitForTask` decides what the `await` on `.attempt()` does:
 
 ```ts
-// waitForTask: false: rechaza apenas vence el timeout o se aborta el signal.
+// waitForTask: false: rejects as soon as the timeout expires or the signal is aborted.
 await resilience({ timeout: 1_000, waitForTask: false }).attempt(task);
-// → TimeoutError al segundo, aunque `task` siga corriendo.
+// → TimeoutError after one second, even if `task` keeps running.
 
-// Por defecto (waitForTask: true): aborta control.signal pero espera a que la tarea termine.
+// Default (waitForTask: true): aborts control.signal but waits for the task to finish.
 const result = await resilience({ timeout: 1_000 }).attempt(
   async ({ signal }) => {
     const items: string[] = [];
     let stop = false;
 
     signal.addEventListener("abort", () => {
-      // signal.reason es un TimeoutError: se termina el ítem actual y se corta.
-      console.warn("Tiempo agotado, guardando lo procesado", signal.reason);
+      // signal.reason is a TimeoutError: finish the current item and stop.
+      console.warn("Time is up, saving processed items", signal.reason);
       stop = true;
     });
 
@@ -161,21 +161,21 @@ const result = await resilience({ timeout: 1_000 }).attempt(
     return { items, complete: !stop };
   },
 );
-// → lo que devuelva la tarea; si la tarea lanza, `attempt` rechaza (o reintenta, en un timeout).
+// → whatever the task returns; if the task throws, `attempt` rejects (or retries, on a timeout).
 ```
 
-#### Qué pasa en cada combinación
+#### What happens in each combination
 
-| Configuración | Al vencer / abortarse | Si la tarea **termina bien** después | Si la tarea **lanza** después | ¿Reintenta? | ¿`fallback`? |
+| Configuration | On expiry / abort | If the task **succeeds** afterwards | If the task **throws** afterwards | Retries? | `fallback`? |
 | --- | --- | --- | --- | --- | --- |
-| `timeout` (por defecto) | Aborta `control.signal` y espera | `attempt` devuelve ese valor (éxito) | Cuenta como fallo del intento | Sí | Sí, si se agotan los intentos |
-| `timeout` + `waitForTask: false` | Rechaza en el momento con `TimeoutError` | Se ignora su valor | Se ignora su error | Sí | Sí, si se agotan los intentos |
-| `signal` (por defecto) | Aborta `control.signal` y espera | `attempt` devuelve ese valor (éxito) | `attempt` rechaza con el error de la tarea | No | No |
-| `signal` + `waitForTask: false` | Rechaza en el momento con `signal.reason` | Se ignora su valor | Se ignora su error | No | No |
+| `timeout` (default) | Aborts `control.signal` and waits | `attempt` returns that value (success) | Counts as a failed attempt | Yes | Yes, if attempts run out |
+| `timeout` + `waitForTask: false` | Rejects right away with `TimeoutError` | Its value is ignored | Its error is ignored | Yes | Yes, if attempts run out |
+| `signal` (default) | Aborts `control.signal` and waits | `attempt` returns that value (success) | `attempt` rejects with the task's error | No | No |
+| `signal` + `waitForTask: false` | Rejects right away with `signal.reason` | Its value is ignored | Its error is ignored | No | No |
 
-> Con el valor por defecto, una tarea que ignora `control.signal` y nunca termina deja a `attempt` esperando para siempre, aunque venza `timeout`. Si la tarea no escucha el abort, usa `waitForTask: false`.
+> With the default value, a task that ignores `control.signal` and never finishes leaves `attempt` waiting forever, even if `timeout` expires. If the task does not listen to the abort, use `waitForTask: false`.
 
-#### `signal: AbortSignal.timeout(10_000)` (con `waitForTask` por defecto)
+#### `signal: AbortSignal.timeout(10_000)` (with the default `waitForTask`)
 
 ```ts
 const result = await resilience({
@@ -184,41 +184,41 @@ const result = await resilience({
   signal: AbortSignal.timeout(10_000),
 }).attempt(async ({ signal }) => {
   signal.addEventListener("abort", () => {
-    // A los 10 s: signal.reason es un TimeoutError.
+    // After 10 s: signal.reason is a TimeoutError.
   });
   return await longTask(signal);
 });
 ```
 
-A los 10 s, contados desde que se creó el signal (no desde cada intento):
+After 10 s, counted from when the signal was created (not from each attempt):
 
-1. **Si hay un intento corriendo**, se aborta su `control.signal` con el `TimeoutError` y `attempt` **espera** a que la tarea termine:
-   - Si la tarea devuelve un valor, `attempt` resuelve con ese valor. Se llama `onSuccess` y `onSettled` con `status: "success"`.
-   - Si la tarea lanza, `attempt` rechaza con **ese error** (no con el `TimeoutError`). No se reintenta ni se usa `fallback`; se llama `onAbort` y `onSettled` con `status: "aborted"`.
-2. **Si está esperando entre intentos** (`delay`), no hay tarea que esperar: `attempt` rechaza en el momento con el `TimeoutError` y no hace más intentos.
-3. **Si el signal ya estaba abortado** antes de llamar a `attempt`, rechaza sin ejecutar la tarea.
+1. **If an attempt is running**, its `control.signal` is aborted with the `TimeoutError` and `attempt` **waits** for the task to finish:
+   - If the task returns a value, `attempt` resolves with that value. `onSuccess` and `onSettled` are called with `status: "success"`.
+   - If the task throws, `attempt` rejects with **that error** (not the `TimeoutError`). There is no retry and no `fallback`; `onAbort` and `onSettled` are called with `status: "aborted"`.
+2. **If it is waiting between attempts** (`delay`), there is no task to wait for: `attempt` rejects right away with the `TimeoutError` and makes no more attempts.
+3. **If the signal was already aborted** before calling `attempt`, it rejects without running the task.
 
-En resumen: `waitForTask` solo cambia si se espera a la tarea **que está corriendo**; un signal abortado nunca deja empezar un intento nuevo.
+In short: `waitForTask` only changes whether the **running** task is awaited; an aborted signal never lets a new attempt start.
 
-Esperar 500 ms entre intentos:
+Wait 500 ms between attempts:
 
 ```ts
 await resilience({ attempts: 3, delay: 500 }).attempt(task);
 ```
 
-Valor alternativo cuando todo falla:
+Fallback value when everything fails:
 
 ```ts
 const user = await resilience({
   attempts: 3,
   fallback: async (lastError) => {
-    console.error("No se pudo obtener el usuario", lastError);
+    console.error("Could not fetch the user", lastError);
     return null;
   },
 }).attempt(({ signal }) => getUser(id, signal)); // User | null
 ```
 
-Timeout de 2 s por intento, solo reintentar errores de servidor:
+2 s timeout per attempt, only retry server errors:
 
 ```ts
 class HttpError extends Error {
@@ -240,9 +240,9 @@ await resilience({
 
 ## Backoff
 
-Helpers listos para la opción `delay`. Todos aceptan `{ maxDelay, jitter }`, donde `jitter` puede ser `"full"` (entre 0 y el delay) o `"equal"` (entre la mitad y el delay).
+Ready-made helpers for the `delay` option. All of them accept `{ maxDelay, jitter }`, where `jitter` can be `"full"` (between 0 and the delay) or `"equal"` (between half the delay and the delay).
 
-| Helper                              | Serie con `ms = 100`         |
+| Helper                              | Series with `ms = 100`       |
 | ----------------------------------- | ---------------------------- |
 | `fixedBackoff(ms)`                  | 100, 100, 100, ...           |
 | `linearBackoff(ms)`                 | 100, 200, 300, ...           |
@@ -255,13 +255,13 @@ import { resilience, exponentialBackoff } from "@jondotsoy/resilience";
 await resilience({
   attempts: 5,
   delay: exponentialBackoff(200, { maxDelay: 5_000, jitter: "full" }),
-  onRetry: ({ attempt, delay }) => console.warn(`Reintento ${attempt} en ${delay} ms`),
+  onRetry: ({ attempt, delay }) => console.warn(`Retry ${attempt} in ${delay} ms`),
 }).attempt(task);
 ```
 
-También puedes pasar tu propia función: `delay: ({ attempt, error }) => ...`.
+You can also pass your own function: `delay: ({ attempt, error }) => ...`.
 
-Todas las utilidades (backoffs, políticas y errores) también están colgadas de la función `resilience`, así que basta con un solo import:
+Every utility (backoffs, policies and errors) is also attached to the `resilience` function, so a single import is enough:
 
 ```ts
 import { resilience } from "@jondotsoy/resilience";
@@ -274,53 +274,53 @@ await resilience({
 const breaker = resilience.circuitBreaker({ failureThreshold: 3 });
 ```
 
-## Políticas con estado
+## Stateful policies
 
-Además de `resilience`, la lib trae políticas que guardan estado entre llamadas. Créalas **una vez** (por ejemplo, una por servicio) y reutilízalas. Todas exponen `execute(fn)` y se pueden anidar entre sí y con `resilience`.
+Besides `resilience`, the library ships policies that keep state across calls. Create them **once** (for example, one per service) and reuse them. They all expose `execute(fn)` and can be nested with each other and with `resilience`.
 
 ### circuitBreaker
 
-Tras `failureThreshold` fallos seguidos se **abre** y rechaza al instante con `CircuitOpenError`. Después de `resetTimeout` ms pasa a **half-open** y deja pasar una prueba: si funciona se **cierra**, si falla se vuelve a abrir.
+After `failureThreshold` consecutive failures it **opens** and rejects instantly with `CircuitOpenError`. After `resetTimeout` ms it moves to **half-open** and lets one probe through: if it succeeds it **closes**, if it fails it opens again.
 
-Dos consumidores, **A** y **B**, comparten el mismo breaker (`failureThreshold: 3`, `resetTimeout: 10_000`). Cada punto es una llamada a `breaker.execute()` en el tiempo:
+Two consumers, **A** and **B**, share the same breaker (`failureThreshold: 3`, `resetTimeout: 10_000`). Each dot is a call to `breaker.execute()` over time:
 
 ```
          ┌───────── closed ─────────┐  ┌──── open ────┐  half  ┌─── open ───┐half  ┌ closed ┐
-tiempo → ─────────────────────────────────────────────────────────────────────────────────────→
+time   → ─────────────────────────────────────────────────────────────────────────────────────→
 A        ●       ✕       ✕       ✕   │     ○       ○   ┊     │ ○       ○   ┊ ◐●  │     ●
 B            ●       ●       ✕       │ ○       ○       ┊ ◐✕  │     ○       ┊     │ ●
-fallos   0   0   1   0   1   2   3   │     10 s        ┊     │    10 s     ┊     │ 0   0
+failures 0   0   1   0   1   2   3   │     10 s        ┊     │    10 s     ┊     │ 0   0
 
- ●  llamada exitosa         ✕  llamada fallida (cuenta para failureThreshold)
- ○  rechazada al instante con CircuitOpenError, sin llamar al servicio
- ◐  llamada de prueba en half-open
+ ●  successful call         ✕  failed call (counts toward failureThreshold)
+ ○  rejected instantly with CircuitOpenError, without calling the service
+ ◐  probe call in half-open
 ```
 
-- **El contador es compartido**: los fallos de A y de B suman juntos. El tercer fallo seguido (de A) abre el circuito para **los dos**.
-- **Un éxito de cualquiera reinicia el contador**: el `●` de B entre los fallos de A lo devuelve a 0.
-- En **open**, A y B reciben `○` durante `resetTimeout`: ninguno llama al servicio.
-- Pasado ese tiempo, **solo una llamada** hace la prueba (`◐`), venga de A o de B. Mientras corre, las demás siguen rechazadas.
-  - Aquí la primera prueba es de B y falla (`◐✕`): el circuito vuelve a **open** para ambos.
-  - La siguiente prueba es de A y funciona (`◐●`): el circuito se **cierra** y B también vuelve a llamar con normalidad.
+- **The counter is shared**: failures from A and B add up together. The third consecutive failure (from A) opens the circuit for **both**.
+- **A success from either one resets the counter**: B's `●` between A's failures brings it back to 0.
+- While **open**, A and B get `○` for `resetTimeout`: neither calls the service.
+- After that time, **only one call** makes the probe (`◐`), whether from A or B. While it runs, the others are still rejected.
+  - Here the first probe is B's and it fails (`◐✕`): the circuit goes back to **open** for both.
+  - The next probe is A's and it succeeds (`◐●`): the circuit **closes** and B also calls normally again.
 
-Por eso el breaker se crea **una vez por servicio** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, B seguiría golpeando un servicio caído que A ya detectó.
+That is why the breaker is created **once per service** and shared by every consumer. If each had its own, B would keep hammering a service that A already knows is down.
 
 ```mermaid
 stateDiagram-v2
     [*] --> closed
-    closed --> open: failureThreshold fallos seguidos
-    open --> half_open: pasa resetTimeout
-    half_open --> closed: successThreshold éxitos
-    half_open --> open: la prueba falla
-    closed --> closed: éxito (reinicia el contador)
+    closed --> open: failureThreshold consecutive failures
+    open --> half_open: resetTimeout elapses
+    half_open --> closed: successThreshold successes
+    half_open --> open: the probe fails
+    closed --> closed: success (resets the counter)
 ```
 
-| Opción             | Por defecto | Descripción                                        |
+| Option             | Default     | Description                                        |
 | ------------------ | ----------- | -------------------------------------------------- |
-| `failureThreshold` | `5`         | Fallos seguidos que abren el circuito.             |
-| `resetTimeout`     | `30_000`    | Ms abierto antes de probar de nuevo.               |
-| `successThreshold` | `1`         | Éxitos en half-open para cerrarlo.                 |
-| `isFailure`        | todos       | `(error) => boolean`, qué errores cuentan como fallo. |
+| `failureThreshold` | `5`         | Consecutive failures that open the circuit.        |
+| `resetTimeout`     | `30_000`    | Ms open before probing again.                      |
+| `successThreshold` | `1`         | Successes in half-open needed to close it.         |
+| `isFailure`        | all         | `(error) => boolean`, which errors count as failures. |
 | `onStateChange`    | —           | `(state, previous) => void`.                       |
 
 ```ts
@@ -337,34 +337,34 @@ breaker.reset();
 bulkhead(options) → { execute(fn, { signal }), running, queued }
 ```
 
-Limita cuántas llamadas corren a la vez. Si hay cupo, la llamada empieza; si no, espera en una cola de tamaño `maxQueue` y sale en orden de llegada cuando se libera un cupo. Con el cupo y la cola llenos, rechaza al instante con `BulkheadRejectedError`.
+Limits how many calls run at once. If there is a free slot, the call starts; otherwise it waits in a queue of size `maxQueue` and leaves in arrival order when a slot frees up. With every slot and the queue full, it rejects instantly with `BulkheadRejectedError`.
 
-Tres consumidores, **A**, **B** y **C**, comparten el mismo bulkhead (`maxConcurrent: 1`, `maxQueue: 1`). Cada llamada dura 2 pasos:
+Three consumers, **A**, **B** and **C**, share the same bulkhead (`maxConcurrent: 1`, `maxQueue: 1`). Each call lasts 2 steps:
 
 ```
-tiempo → ──────────────────────────────→
-A        ●   ─               ◷   ●   ─
-B            ◷   ●   ─
-C            ○       ◷   ●   ─
-en curso 1   1   1   1   1   1   1   1
-en cola      1       1       1
+time    → ──────────────────────────────→
+A         ●   ─               ◷   ●   ─
+B             ◷   ●   ─
+C             ○       ◷   ●   ─
+running   1   1   1   1   1   1   1   1
+queued        1       1       1
 
- ●  empieza   ─  corriendo   ◷  entra a la cola   ○  rechazada al instante con BulkheadRejectedError
+ ●  starts   ─  running   ◷  enters the queue   ○  rejected instantly with BulkheadRejectedError
 ```
 
-- **El cupo es compartido**: entre A, B y C solo corre una llamada a la vez.
-- B llega mientras corre A y **espera en la cola** (`◷`). C llega en el mismo paso, con el cupo y la cola llenos, y **se rechaza** (`○`).
-- Cuando A termina, **B sale de la cola y empieza** sin volver a llamar a `execute`.
-- La cola respeta el **orden de llegada**: después C espera a B, y A espera a C.
-- El cupo se libera aunque la llamada falle.
+- **The slots are shared**: among A, B and C only one call runs at a time.
+- B arrives while A is running and **waits in the queue** (`◷`). C arrives in the same step, with the slot and the queue full, and **is rejected** (`○`).
+- When A finishes, **B leaves the queue and starts** without calling `execute` again.
+- The queue respects **arrival order**: then C waits for B, and A waits for C.
+- The slot is released even if the call fails.
 
-Por eso el bulkhead se crea **una vez por recurso** (una base de datos, un servicio lento) y lo comparten todos los consumidores. Si cada uno tuviera el suyo, entre todos podrían saturar el recurso.
+That is why the bulkhead is created **once per resource** (a database, a slow service) and shared by every consumer. If each had its own, together they could overload the resource.
 
-| Opción          | Por defecto | Descripción                                   |
+| Option          | Default     | Description                                   |
 | --------------- | ----------- | --------------------------------------------- |
-| `maxConcurrent` | —           | Llamadas en paralelo.                         |
-| `maxQueue`      | `0`         | Llamadas esperando turno.                     |
-| `signal`        | —           | En `execute`: cancela la espera en la cola.   |
+| `maxConcurrent` | —           | Calls in parallel.                            |
+| `maxQueue`      | `0`         | Calls waiting for their turn.                 |
+| `signal`        | —           | In `execute`: cancels the wait in the queue.  |
 
 ```ts
 const db = resilience.bulkhead({
@@ -375,8 +375,8 @@ const db = resilience.bulkhead({
 export const query = (sql: string, signal?: AbortSignal) =>
   db.execute(() => client.query(sql), { signal });
 
-db.running; // en curso
-db.queued;  // esperando
+db.running; // running
+db.queued;  // waiting
 ```
 
 ### throttle
@@ -385,43 +385,43 @@ db.queued;  // esperando
 throttle(options) → { execute(fn), remaining }
 ```
 
-Limita la cantidad de llamadas en una ventana deslizante: como máximo `limit` llamadas en cualquier lapso de `interval` ms. Al superarlo rechaza con `ThrottleError`, cuyo `retryAfter` dice cuántos ms faltan para que se libere un cupo. Las llamadas rechazadas no gastan cupo.
+Limits the number of calls in a sliding window: at most `limit` calls in any span of `interval` ms. When exceeded it rejects with `ThrottleError`, whose `retryAfter` says how many ms remain until a slot frees up. Rejected calls do not use up slots.
 
-Tres consumidores, **A**, **B** y **C**, comparten el mismo throttle (`limit: 3`, `interval: 5 pasos`):
+Three consumers, **A**, **B** and **C**, share the same throttle (`limit: 3`, `interval: 5 steps`):
 
 ```
-tiempo → ──────────────────────────────────────────────→
-A        ●   ○               ●                       ●
-B        ●       ○               ●                   ●
-C        ●                   ●       ○
-cupos    0   0   0   0   0   1   0   0   0   0   2   1
+time    → ──────────────────────────────────────────────→
+A         ●   ○               ●                       ●
+B         ●       ○               ●                   ●
+C         ●                   ●       ○
+slots     0   0   0   0   0   1   0   0   0   0   2   1
 
- ●  permitida   ○  rechazada al instante con ThrottleError
+ ●  allowed   ○  rejected instantly with ThrottleError
 ```
 
-- **El límite es compartido**: A, B y C gastan los 3 cupos en el primer paso, así que el `○` de A y el de B no llaman al servicio.
-- Cada `ThrottleError` trae `retryAfter`: el de A dice 4 pasos y el de B 3, lo que falta para que la llamada más antigua salga de la ventana.
-- Las rechazadas **no gastan cupo**: cinco pasos después se liberan los 3 cupos del inicio, aunque A y B lo hayan intentado entre medio.
-- La ventana es **deslizante**: en cada paso cuentan las llamadas de los últimos 5 pasos, no las de un bloque fijo.
+- **The limit is shared**: A, B and C use the 3 slots in the first step, so A's `○` and B's `○` do not call the service.
+- Each `ThrottleError` carries `retryAfter`: A's says 4 steps and B's says 3, the time left until the oldest call leaves the window.
+- Rejected calls **do not use up slots**: five steps later the 3 initial slots are freed, even though A and B tried in between.
+- The window is **sliding**: at each step, the calls from the last 5 steps count, not those from a fixed block.
 
-Por eso el throttle se crea **una vez por API** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, entre todos superarían el rate limit.
+That is why the throttle is created **once per API** and shared by every consumer. If each had its own, together they would exceed the rate limit.
 
-| Opción     | Por defecto | Descripción                       |
+| Option     | Default     | Description                       |
 | ---------- | ----------- | --------------------------------- |
-| `limit`    | —           | Llamadas permitidas por ventana.  |
-| `interval` | —           | Tamaño de la ventana en ms.       |
+| `limit`    | —           | Calls allowed per window.         |
+| `interval` | —           | Window size in ms.                |
 
 ```ts
 const api = resilience.throttle({
   limit: 3,
-  interval: 1_000, // 3 por segundo
+  interval: 1_000, // 3 per second
 });
 
 try {
   await api.execute(() => fetch(url));
 } catch (error) {
   if (error instanceof resilience.ThrottleError) {
-    console.log("reintentar en", error.retryAfter, "ms");
+    console.log("retry in", error.retryAfter, "ms");
   }
 }
 ```
@@ -432,32 +432,32 @@ try {
 cache(options) → { execute(key, fn), delete(key), clear(), size }
 ```
 
-Guarda en memoria el resultado de `fn` para una `key` durante `ttl` ms, contados desde que llega el valor. Mientras el valor es válido, los pedidos lo reciben sin llamar al servicio. Si llega un pedido mientras la primera llamada sigue en curso, comparte esa misma ejecución. Los errores no se guardan.
+Stores the result of `fn` in memory for a `key` during `ttl` ms, counted from when the value arrives. While the value is valid, requests receive it without calling the service. If a request arrives while the first call is still in flight, it shares that same execution. Errors are not cached.
 
-Tres consumidores, **A**, **B** y **C**, piden la misma key a un cache compartido (`ttl: 5 pasos`). El servicio tarda 2 pasos en responder:
+Three consumers, **A**, **B** and **C**, request the same key from a shared cache (`ttl: 5 steps`). The service takes 2 steps to respond:
 
 ```
-tiempo → ──────────────────────────────────────────────────────────────→
-A        ●   ─           ◆                   ◌✕              ◆
-B            ◌                   ◆                   ●   ─
-C                ◆                       ✕   ─           ◌
-ttl              5   4   3   2   1                           5   4   3
+time    → ──────────────────────────────────────────────────────────────→
+A         ●   ─           ◆                   ◌✕              ◆
+B             ◌                   ◆                   ●   ─
+C                 ◆                       ✕   ─           ◌
+ttl               5   4   3   2   1                           5   4   3
 
- ●  miss (llama al servicio)   ─  esperando respuesta   ◆  hit   ◌  comparte la llamada en curso
- ✕  miss que falla (el error no se guarda)
+ ●  miss (calls the service)   ─  waiting for the response   ◆  hit   ◌  shares the in-flight call
+ ✕  failing miss (the error is not cached)
 ```
 
-- A no encuentra el valor y **llama al servicio**. B llega mientras esa llamada sigue en curso y **la comparte** (`◌`) en vez de llamar otra vez.
-- Cuando llega el valor se guarda: C, A y B reciben **hits** (`◆`) durante 5 pasos. La fila `ttl` muestra cuánto le queda.
-- Al vencer el `ttl` la caché queda vacía y el siguiente pedido, de C, vuelve a llamar. Esa llamada **falla**: A, que la compartía, recibe el mismo error (`◌✕`).
-- **El error no se guarda**: B vuelve a llamar, esta vez funciona y el valor queda guardado otros 5 pasos.
+- A does not find the value and **calls the service**. B arrives while that call is still in flight and **shares it** (`◌`) instead of calling again.
+- When the value arrives it is stored: C, A and B get **hits** (`◆`) for 5 steps. The `ttl` row shows how much time is left.
+- When the `ttl` expires the cache is empty and the next request, from C, calls again. That call **fails**: A, which was sharing it, gets the same error (`◌✕`).
+- **The error is not cached**: B calls again, this time it succeeds and the value is stored for another 5 steps.
 
-Por eso el cache se crea **una vez por tipo de dato** y lo comparten todos los consumidores. Si cada uno tuviera el suyo, cada uno pagaría su propio miss.
+That is why the cache is created **once per data type** and shared by every consumer. If each had its own, each would pay for its own miss.
 
-| Opción    | Por defecto | Descripción                                               |
+| Option    | Default     | Description                                               |
 | --------- | ----------- | --------------------------------------------------------- |
-| `ttl`     | —           | Vida de cada entrada en ms.                               |
-| `maxSize` | sin límite  | Máximo de entradas; al superarlo sale la más antigua.     |
+| `ttl`     | —           | Lifetime of each entry in ms.                             |
+| `maxSize` | unlimited   | Maximum entries; when exceeded, the oldest is evicted.    |
 
 ```ts
 const users = resilience.cache({
@@ -468,7 +468,7 @@ const users = resilience.cache({
 export const getUser = (id: string) =>
   users.execute(`user:${id}`, () => fetchUser(id));
 
-users.delete("user:42"); // invalidar una entrada
+users.delete("user:42"); // invalidate an entry
 ```
 
 ### dedupe
@@ -477,33 +477,33 @@ users.delete("user:42"); // invalidar una entrada
 dedupe() → { execute(key, fn), pending }
 ```
 
-Si ya hay una llamada en curso con la misma `key`, devuelve esa misma promesa en vez de ejecutar `fn` otra vez. No guarda resultados: en cuanto la llamada termina (bien o con error) la key se libera y el siguiente pedido vuelve a llamar.
+If there is already a call in flight with the same `key`, it returns that same promise instead of running `fn` again. It does not store results: as soon as the call finishes (successfully or with an error) the key is released and the next request calls again.
 
-Sirve cuando varios componentes piden lo mismo al mismo tiempo, por ejemplo la configuración al arrancar.
+Useful when several components request the same thing at the same time, for example the configuration at startup.
 
-Tres consumidores, **A**, **B** y **C**, piden la misma key a un dedupe compartido. El servicio tarda 2 pasos en responder:
+Three consumers, **A**, **B** and **C**, request the same key from a shared dedupe. The service takes 2 steps to respond:
 
 ```
-tiempo → ──────────────────────────────────────────────────→
-A        ●   ─       ◌                   ◌✕
-B            ◌               ●   ─               ●   ─
-C                ●   ─               ✕   ─           ◌
-pending  1   1   1   1   0   1   1   1   1   0   1   1   0
+time    → ──────────────────────────────────────────────────→
+A         ●   ─       ◌                   ◌✕
+B             ◌               ●   ─               ●   ─
+C                 ●   ─               ✕   ─           ◌
+pending   1   1   1   1   0   1   1   1   1   0   1   1   0
 
- ●  llama al servicio   ─  esperando respuesta   ◌  recibe la misma promesa   ✕  llamada que falla
+ ●  calls the service   ─  waiting for the response   ◌  receives the same promise   ✕  failing call
 ```
 
-- A llama al servicio y B, que llega mientras tanto, **recibe la misma promesa** (`◌`): una sola petición para los dos.
-- **No guarda resultados**: en cuanto termina la llamada de A la key queda libre (`pending` vuelve a 0) y el siguiente pedido, de C, vuelve a llamar.
-- Si la llamada falla, **todos los que la compartían reciben el error**: C falla y A, que se sumó, recibe el mismo error (`◌✕`).
-- Después de un error la key también se libera, así que el siguiente pedido de B vuelve a intentarlo.
+- A calls the service and B, arriving in the meantime, **receives the same promise** (`◌`): a single request for both.
+- **It does not store results**: as soon as A's call finishes the key is free (`pending` goes back to 0) and the next request, from C, calls again.
+- If the call fails, **everyone sharing it receives the error**: C fails and A, which joined, gets the same error (`◌✕`).
+- After an error the key is released too, so B's next request tries again.
 
-A diferencia de `cache`, `dedupe` solo une los pedidos **simultáneos**. Si necesitas reutilizar el valor después de que llegó, usa `cache`.
+Unlike `cache`, `dedupe` only merges **simultaneous** requests. If you need to reuse the value after it arrived, use `cache`.
 
 ```ts
 const inFlight = resilience.dedupe();
 
-// A, B y C llaman casi a la vez: una sola petición
+// A, B and C call almost at once: a single request
 const [a, b, c] = await Promise.all([
   inFlight.execute("config", loadConfig),
   inFlight.execute("config", loadConfig),
@@ -511,9 +511,9 @@ const [a, b, c] = await Promise.all([
 ]);
 ```
 
-### Combinarlas
+### Combining them
 
-El orden de anidación define el comportamiento. Por ejemplo, un breaker por fuera hace que toda la secuencia de reintentos cuente como una sola llamada:
+The nesting order defines the behavior. For example, a breaker on the outside makes the whole retry sequence count as a single call:
 
 ```ts
 const breaker = circuitBreaker({ failureThreshold: 3 });
@@ -528,18 +528,18 @@ const getData = () =>
     }).attempt(({ signal }) => pool.execute(() => fetch(url, { signal }), { signal })),
   );
 
-// Con fallback por fuera, incluso un CircuitOpenError termina en el valor alternativo:
+// With a fallback on the outside, even a CircuitOpenError ends in the fallback value:
 const getDataSafe = () =>
   resilience({ fallback: () => cachedData }).attempt(getData);
 ```
 
-## Guía: crear un decorador con `resilience`
+## Guide: build a decorator with `resilience`
 
-`resilience` no trae un decorador, pero se arma en pocas líneas. Esta guía usa los decoradores estándar de TypeScript 5 (sin `experimentalDecorators`), que también soporta Bun.
+`resilience` does not ship a decorator, but you can build one in a few lines. This guide uses TypeScript 5 standard decorators (without `experimentalDecorators`), which Bun also supports.
 
-### 1. El decorador
+### 1. The decorator
 
-El decorador recibe las opciones, crea el ejecutor una sola vez y reemplaza el método por uno que lo llama dentro de `attempt`. El `control` del intento se agrega como último argumento del método:
+The decorator receives the options, creates the executor once and replaces the method with one that calls it inside `attempt`. The attempt's `control` is appended as the method's last argument:
 
 ```ts
 import { resilience, type Control, type ResilienceOptions } from "@jondotsoy/resilience";
@@ -551,7 +551,7 @@ export function resilient<This>(
     method: (this: This, ...args: [...Args, Control?]) => R | Promise<R>,
     _context: ClassMethodDecoratorContext<This>,
   ) {
-    // Con opciones fijas, un solo ejecutor para todas las instancias.
+    // With fixed options, a single executor for every instance.
     const shared = typeof options === "function" ? undefined : resilience(options);
 
     return function (this: This, ...args: Args): Promise<R> {
@@ -563,9 +563,9 @@ export function resilient<This>(
 }
 ```
 
-### 2. Usarlo en una clase
+### 2. Use it in a class
 
-Declara `control` como último parámetro y opcional. TypeScript no deja que un decorador cambie el tipo del método, así que para quien llama el parámetro sigue existiendo, pero no lo pasa: lo pone el decorador en cada intento.
+Declare `control` as the last, optional parameter. TypeScript does not let a decorator change the method's type, so the parameter still exists for the caller, but they do not pass it: the decorator supplies it on each attempt.
 
 ```ts
 class UsersApi {
@@ -586,11 +586,11 @@ class UsersApi {
 const user = await new UsersApi().getUser("42");
 ```
 
-Con `control` el método puede cancelar el `fetch` cuando vence el `timeout` y leer `control.attempt` o `control.lastError` si los necesita.
+With `control` the method can cancel the `fetch` when the `timeout` expires and read `control.attempt` or `control.lastError` if it needs them.
 
-### 3. Opciones por instancia
+### 3. Per-instance options
 
-Si cada objeto tiene su propio `AbortController` (por ejemplo, para cancelar todo al cerrar el servicio), pasa una función que reciba la instancia. En ese caso el ejecutor se crea en cada llamada:
+If each object has its own `AbortController` (for example, to cancel everything when the service shuts down), pass a function that receives the instance. In that case the executor is created on every call:
 
 ```ts
 class Worker {
@@ -607,9 +607,9 @@ class Worker {
 }
 ```
 
-### 4. Agregar políticas con estado
+### 4. Add stateful policies
 
-Las políticas como `circuitBreaker` o `bulkhead` se usan dentro del método con `execute`. Si las creas fuera de la clase, todas las instancias las comparten, que es lo habitual para un cliente de un mismo servicio:
+Policies like `circuitBreaker` or `bulkhead` are used inside the method with `execute`. If you create them outside the class, every instance shares them, which is the usual setup for a client of a single service:
 
 ```ts
 const breaker = resilience.circuitBreaker({ failureThreshold: 5 });
@@ -628,12 +628,12 @@ class PaymentsApi {
 }
 ```
 
-### Ten en cuenta
+### Keep in mind
 
-- El `control` va siempre al final, después de los argumentos que pasó quien llama. Si el método tiene parámetros opcionales antes de `control` y se omiten, el `control` quedaría en otra posición. Prefiere parámetros fijos o un objeto de opciones.
-- Con opciones fijas, la configuración se comparte entre todas las instancias de la clase.
-- El decorador devuelve siempre una promesa, aunque el método original sea síncrono.
+- `control` always goes last, after the arguments the caller passed. If the method has optional parameters before `control` and they are omitted, `control` would end up in a different position. Prefer fixed parameters or an options object.
+- With fixed options, the configuration is shared by every instance of the class.
+- The decorator always returns a promise, even if the original method is synchronous.
 
-## Licencia
+## License
 
 MIT

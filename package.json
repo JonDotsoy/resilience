@@ -1,7 +1,7 @@
 {
   "name": "@jondotsoy/resilience",
   "version": "0.1.2",
-  "description": "Ejecuta una función con reintentos y cancelación vía AbortSignal.",
+  "description": "Run a function with retries and cancellation through AbortSignal.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,12 +24,18 @@
   },
   "keywords": [
     "retry",
-    "resilience",
+    "backoff",
+    "circuit-breaker",
+    "bulkhead",
+    "timeout",
     "abort",
-    "signal",
-    "fetch"
+    "fallback"
   ],
-  "author": "JonDotsoy",
+  "author": {
+    "name": "Jonathan Delgado",
+    "email": "hi@jon.soy",
+    "url": "https://jon.soy"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
