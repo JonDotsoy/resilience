@@ -1,0 +1,1408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>resilience · Retries and cancellation for TypeScript</title>
+<meta name="description" content="Run a function with retries and cancellation through AbortSignal. Zero dependencies.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky top bar, sticky left index (drawer on mobile) and one reading column. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --sunken: #eef0f4;
+  --line: #dde1e8;
+  --fg: #161a22;
+  --muted: #5a6273;
+  --accent: #2d55c8;
+  --accent-soft: #e5ebfb;
+  --ok: #1b8a5a;
+  --fail: #c8412d;
+  --wait: #b7790f;
+  --code-bg: #10141c;
+  --code-fg: #d9dee8;
+  --code-muted: #7d8699;
+  --code-key: #8fb3ff;
+  --code-str: #9fd8a8;
+  --code-num: #f2b56b;
+  --code-fn: #e6c8ff;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --nav-w: 248px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1117; --surface: #151a23; --sunken: #1b212c; --line: #2a3140;
+    --fg: #e6e9ef; --muted: #98a1b3; --accent: #8aa8ff; --accent-soft: #1d2740;
+    --ok: #4cc28c; --fail: #ff7a66; --wait: #e9b04d;
+    --code-bg: #0a0d13; --code-fg: #d9dee8; --code-muted: #6f788b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1117; --surface: #151a23; --sunken: #1b212c; --line: #2a3140;
+  --fg: #e6e9ef; --muted: #98a1b3; --accent: #8aa8ff; --accent-soft: #1d2740;
+  --ok: #4cc28c; --fail: #ff7a66; --wait: #e9b04d;
+  --code-bg: #0a0d13; --code-fg: #d9dee8; --code-muted: #6f788b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html { scroll-behavior: smooth; scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 56px + 24px); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.65 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 21; background: var(--bg); }
+.topbar-inner {
+  max-width: 1240px; margin: 0 auto; height: 56px;
+  display: flex; align-items: center; gap: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.brand-mark { width: 26px; height: 26px; flex: none; }
+.brand small { font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+.topbar nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.topbar nav a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; padding: 6px 10px; border-radius: 6px; }
+.topbar nav a:hover { color: var(--fg); background: var(--sunken); }
+.menu-btn { display: none; align-items: center; gap: 8px; margin-left: auto; min-width: 0; max-width: 60vw; background: var(--surface); border: 1px solid var(--line); color: var(--fg); border-radius: 8px; padding: 7px 12px; font: 500 14px var(--body); cursor: pointer; }
+.menu-btn svg { flex: none; }
+.menu-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-head { display: none; align-items: center; justify-content: space-between; padding: 6px 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.nav-head b { font: 700 18px var(--display); }
+.nav-close { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 8px; width: 36px; height: 36px; font-size: 20px; line-height: 1; cursor: pointer; }
+.nav-backdrop { position: fixed; inset: 0; z-index: 35; background: rgba(8, 10, 16, .45); }
+@media (prefers-reduced-motion: reduce) { .sidenav { transition: none !important; } }
+
+/* ---------- Hero ---------- */
+.hero { border-bottom: 1px solid var(--line); background: var(--surface); }
+.hero-inner {
+  max-width: 1240px; margin: 0 auto;
+  padding-block: 64px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center;
+}
+.eyebrow { font: 500 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 16px; }
+.hero h1 { font: 700 clamp(40px, 6vw, 64px)/1.02 var(--display); letter-spacing: -0.035em; margin: 0 0 20px; text-wrap: balance; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.lede { font-size: 19px; color: var(--muted); max-width: 34ch; margin: 0 0 28px; }
+.install {
+  display: flex; align-items: center; gap: 12px; max-width: 440px;
+  background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 12px 12px 12px 16px;
+  font: 14px var(--mono);
+}
+.install span.prompt { color: var(--code-muted); user-select: none; }
+.install code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: transparent; border: 0; padding: 0; font-size: 14px; color: var(--code-fg); }
+.hero-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--body); padding: 9px 14px; border-radius: 8px; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.btn:hover { background: var(--sunken); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 26px; font-size: 13px; color: var(--muted); list-style: none; padding: 0; }
+.facts li::before { content: "✓"; color: var(--ok); margin-right: 6px; font-weight: 600; }
+
+/* Retry timeline */
+.timeline-card { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-width: 0; }
+.timeline-card .tc-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
+.timeline-card .tc-head b { color: var(--fg); font-weight: 500; }
+.replay { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; font: 12px var(--mono); padding: 3px 8px; cursor: pointer; }
+.replay:hover { color: var(--fg); }
+.tc-code { margin: 0; padding: 16px; font: 13px/1.6 var(--mono); background: var(--code-bg); color: var(--code-fg); overflow-x: auto; }
+.track { padding: 22px 16px 10px; }
+.lane { position: relative; height: 34px; display: flex; align-items: center; }
+.seg { height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font: 500 11px var(--mono); flex: none; position: relative; }
+.seg.run { color: var(--surface); }
+.seg.run.fail { background: var(--fail); }
+.seg.run.ok { background: var(--ok); }
+.seg.gap { background: repeating-linear-gradient(90deg, var(--wait) 0 4px, transparent 4px 8px); height: 2px; opacity: 0.9; }
+.seg.gap span { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); color: var(--wait); white-space: nowrap; font-size: 11px; }
+.axis { display: flex; justify-content: space-between; padding: 6px 16px 14px; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+@media (prefers-reduced-motion: no-preference) {
+  .track.play .seg { animation: grow 0.5s cubic-bezier(.2,.7,.2,1) both; transform-origin: left center; }
+  @keyframes grow { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+}
+
+/* ---------- Layout ---------- */
+.layout {
+  max-width: 1240px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: var(--nav-w) minmax(0, 1fr); gap: 56px;
+}
+.sidenav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); align-self: start; max-height: calc(100vh - 56px); overflow-y: auto; padding-block: 36px 40px; }
+.sidenav h4 { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 6px; }
+.sidenav h4:first-child { margin-top: 0; }
+.sidenav ul { list-style: none; margin: 0; padding: 0; }
+.sidenav a { display: block; padding: 4px 10px; margin-left: -10px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 14px; border-left: 2px solid transparent; }
+.sidenav a:hover { color: var(--fg); }
+.sidenav a.active { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.sidenav a code { font-size: 13px; }
+
+main { padding-block: 36px 96px; min-width: 0; max-width: 820px; }
+section { padding-top: 8px; }
+section + section { margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--line); }
+h2 { font: 700 32px/1.15 var(--display); letter-spacing: -0.025em; margin: 0 0 14px; text-wrap: balance; }
+h3 { font: 600 21px/1.3 var(--display); letter-spacing: -0.01em; margin: 40px 0 10px; text-wrap: balance; }
+h4.sub { font: 600 16px/1.4 var(--body); margin: 28px 0 8px; }
+h2 a.anchor, h3 a.anchor { color: var(--line); text-decoration: none; margin-left: 8px; font-weight: 400; opacity: 0; transition: opacity .15s; }
+h2:hover a.anchor, h3:hover a.anchor { opacity: 1; }
+p, li { max-width: 68ch; }
+p { margin: 0 0 14px; }
+ul.list { padding-left: 20px; margin: 0 0 16px; }
+ul.list li { margin-bottom: 6px; }
+.section-lede { font-size: 18px; color: var(--muted); margin-bottom: 22px; }
+
+:not(pre) > code { font: 0.86em var(--mono); background: var(--sunken); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+td :not(pre) > code, th code { white-space: normal; overflow-wrap: anywhere; }
+
+/* Code blocks */
+.code { position: relative; margin: 0 0 20px; background: var(--code-bg); border-radius: 10px; overflow: hidden; }
+.code pre { margin: 0; padding: 16px 18px; overflow-x: auto; font: 13.5px/1.65 var(--mono); color: var(--code-fg); tab-size: 2; }
+.code .lang { position: absolute; top: 9px; right: 64px; font: 11px var(--mono); color: var(--code-muted); text-transform: uppercase; letter-spacing: 0.06em; pointer-events: none; }
+.copy { position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid #2a3140; color: var(--code-muted); border-radius: 6px; font: 11px var(--mono); padding: 3px 8px; cursor: pointer; }
+.copy:hover { color: var(--code-fg); border-color: var(--code-muted); }
+.tok-c { color: var(--code-muted); font-style: italic; }
+.tok-s { color: var(--code-str); }
+.tok-k { color: var(--code-key); }
+.tok-n { color: var(--code-num); }
+.tok-f { color: var(--code-fn); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; margin: 0 0 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--sunken); white-space: nowrap; }
+td:first-child { white-space: nowrap; }
+td.type code { color: var(--accent); background: transparent; border: 0; padding: 0; }
+td.def { white-space: nowrap; color: var(--muted); }
+table.opts { table-layout: fixed; min-width: 720px; }
+table.opts td.type code { white-space: normal; overflow-wrap: normal; word-break: normal; line-height: 1.6; display: inline-block; }
+table.opts td.def { white-space: normal; }
+table.opts tr.group td { background: var(--sunken); font: 600 14px var(--body); padding-top: 14px; white-space: normal; }
+table.opts tr.group td span { display: block; font-weight: 400; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* Callouts */
+.note { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px 16px 14px 44px; position: relative; margin: 0 0 20px; font-size: 15px; }
+.note::before { content: "!"; position: absolute; left: 14px; top: 14px; width: 20px; height: 20px; border-radius: 50%; background: var(--wait); color: var(--surface); font: 700 13px/20px var(--body); text-align: center; }
+.note p:last-child { margin: 0; }
+
+/* Lifecycle */
+.lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 22px; font: 13px var(--mono); }
+.lifecycle .hook { padding: 5px 10px; border-radius: 6px; background: var(--sunken); border: 1px solid var(--line); }
+.lifecycle .hook.opt { border-style: dashed; color: var(--muted); }
+.lifecycle .loop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--accent); position: relative; margin-top: 10px; }
+.lifecycle .loop::before { content: "each attempt"; position: absolute; top: -9px; left: 10px; background: var(--surface); padding: 0 6px; font-size: 11px; color: var(--accent); }
+.lifecycle .arrow { color: var(--muted); }
+.lifecycle .or { color: var(--muted); font-size: 12px; }
+
+/* Diagrams */
+.diagram { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow-x: auto; }
+.diagram pre { margin: 0; padding: 16px 18px; font: 13px/1.55 var(--mono); color: var(--fg); }
+.g-ok { color: var(--ok); font-weight: 700; }
+.g-fail { color: var(--fail); font-weight: 700; }
+.g-rej { color: var(--muted); }
+.g-probe, .g-queue, .g-share { color: var(--wait); font-weight: 700; }
+.g-hit { color: var(--accent); font-weight: 700; }
+
+/* Visual timelines (policies) */
+.tl { margin: 0 0 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.tl-scroll { position: relative; overflow-x: auto; padding: 16px 16px 8px; }
+.tl-grid { display: grid; grid-template-columns: 92px repeat(var(--n), minmax(34px, 1fr)); min-width: calc(92px + var(--n) * 34px); row-gap: 2px; }
+.tl-lbl { font: 500 12px var(--mono); color: var(--muted); display: flex; align-items: center; padding-right: 10px; }
+.tl-lbl.who { color: var(--fg); font: 600 14px var(--body); }
+.tl-lbl { position: sticky; left: 0; z-index: 2; background: var(--surface); box-shadow: -16px 0 0 var(--surface); }
+.tl-cell { height: 38px; display: flex; align-items: center; justify-content: center; gap: 2px; position: relative; }
+.tl-cell.meter { height: 28px; font: 500 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl-cell.meter.hot { color: var(--fail); font-weight: 700; }
+.tl-phase { height: 26px; margin-bottom: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font: 500 11px var(--mono); letter-spacing: .02em; white-space: nowrap; overflow: hidden; }
+.ph-closed { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+.ph-open { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); }
+.ph-half { background: color-mix(in srgb, var(--wait) 16%, transparent); color: var(--wait); }
+.tl-cell.ph-closed, .tl-cell.ph-open, .tl-cell.ph-half { color: inherit; }
+.tl-axis { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font: 11px var(--mono); color: var(--muted); padding-top: 6px; }
+.tl-axis::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line), var(--muted)); }
+.mk { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font: 700 11px/1 var(--body); color: var(--surface); }
+.mk.sm { width: 14px; height: 14px; font-size: 9px; }
+.mk.ok { background: var(--ok); }
+.mk.fail { background: var(--fail); }
+.mk.fail::before { content: "×"; font-size: 1.25em; }
+.mk.rej { border: 2px solid var(--muted); opacity: .7; }
+.mk.probe { border: 2px solid var(--wait); background: linear-gradient(90deg, var(--wait) 50%, transparent 50%); }
+.mk.queue { border: 2px dashed var(--wait); }
+.mk.hit { width: 13px; height: 13px; border-radius: 3px; background: var(--accent); transform: rotate(45deg); }
+.mk.share { border: 2px dashed var(--accent); }
+.mk.share::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.run { position: absolute; left: -2px; right: -2px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.tl-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); margin: 0; }
+.tl-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.tl-legend .run-key { position: static; display: inline-block; width: 22px; }
+
+/* Behavior explorer (waitForTask) */
+.bx { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 20px; overflow: hidden; }
+.bx-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--sunken); }
+.seg-ctl { display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.seg-lbl { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+.seg-ctl button { font: 500 13px var(--body); color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 5px 11px; cursor: pointer; }
+.seg-ctl button:first-of-type { border-radius: 7px 0 0 7px; }
+.seg-ctl button:last-of-type { border-radius: 0 7px 7px 0; margin-left: -1px; }
+.seg-ctl button code { background: none; border: 0; padding: 0; font-size: 12.5px; color: inherit; }
+.seg-ctl button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); position: relative; z-index: 1; }
+.bx-stage { padding: 20px 16px 8px; display: grid; gap: 10px; }
+.bx-lane { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 10px; }
+.bx-name { font: 500 12px var(--mono); color: var(--muted); }
+.bx-name code { background: none; border: 0; padding: 0; color: var(--fg); }
+.bx-track { position: relative; height: 30px; border-radius: 6px; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%); }
+.bx-bar { position: absolute; top: 6px; height: 18px; border-radius: 5px; transition: left .3s ease, width .3s ease, opacity .3s ease; }
+.bx-bar.run { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.bx-bar.ghost { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 35%, transparent) 0 5px, transparent 5px 10px); border: 1px dashed var(--muted); }
+.bx-bar.next { background: color-mix(in srgb, var(--accent) 30%, transparent); border: 1px dashed var(--accent); }
+.bx-bar { overflow: hidden; }
+.bx-bar span { position: absolute; left: 8px; right: 6px; overflow: hidden; text-overflow: ellipsis; top: 50%; transform: translateY(-50%); font: 500 11px var(--mono); color: var(--fg); white-space: nowrap; }
+.bx-abort { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--wait); }
+.bx-abort b { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font: 600 11px var(--mono); color: var(--wait); white-space: nowrap; }
+.bx-pin { position: absolute; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: 700 12px/1 var(--body); color: var(--surface); transition: left .3s ease; z-index: 1; }
+.bx-pin.ok { background: var(--ok); }
+.bx-pin.fail { background: var(--fail); }
+.bx-pin.ignored { background: var(--surface); color: var(--muted); border: 2px solid var(--muted); }
+.bx-pin-lbl { position: absolute; top: 50%; transform: translateY(-50%); font: 500 12px var(--body); color: var(--fg); white-space: nowrap; transition: left .3s ease; }
+.bx-pin-lbl.left { transform: translate(-100%, -50%); }
+.bx-empty { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font: 12px var(--body); color: var(--muted); }
+.bx-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 16px; border-top: 1px solid var(--line); }
+.bx-verdict { font-size: 15px; min-width: 0; flex: 1 1 280px; }
+.bx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip.yes { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.chip.no { opacity: .75; }
+@media (max-width: 520px) { .bx-pin-lbl { display: none; } .bx-lane { grid-template-columns: 64px minmax(0, 1fr); } .bx-name { font-size: 11px; } }
+@media (prefers-reduced-motion: reduce) { .bx-bar, .bx-pin, .bx-pin-lbl { transition: none; } }
+
+/* Bulkhead playground */
+.sim { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 20px; overflow: hidden; }
+.sim-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 12px 16px; background: var(--sunken); border-bottom: 1px solid var(--line); }
+.sim-group { display: flex; align-items: center; gap: 4px; }
+.sim-right { margin-left: auto; gap: 8px; }
+.sim-right .btn { padding: 6px 12px; font-size: 13px; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.stepper button { width: 30px; height: 30px; border: 0; background: none; color: var(--fg); font: 600 16px var(--body); cursor: pointer; }
+.stepper button:hover { background: var(--sunken); }
+.stepper button:disabled { color: var(--line); cursor: default; background: none; }
+.stepper output { min-width: 26px; text-align: center; font: 600 14px var(--mono); font-variant-numeric: tabular-nums; }
+.sim-live { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 16px 28px; align-items: end; padding: 16px; border-bottom: 1px solid var(--line); }
+.sim-pool, .sim-calls { display: grid; gap: 8px; min-width: 0; }
+.boxes { display: flex; gap: 6px; flex-wrap: wrap; min-height: 40px; }
+.box { width: 40px; height: 40px; border-radius: 8px; border: 1.5px dashed var(--line); display: flex; align-items: center; justify-content: center; font: 700 15px var(--body); position: relative; overflow: hidden; }
+.box.busy { border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--fg); }
+.box.busy i { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--accent); transition: width .25s ease; }
+.box.waiting { border: 1.5px dashed var(--wait); color: var(--wait); }
+.box.none { font: 500 11px var(--mono); color: var(--muted); width: auto; padding: 0 10px; border-style: dotted; }
+.calls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.who-btn { width: 40px; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 700 14px var(--body); cursor: pointer; }
+.who-btn[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.calls .btn.primary { margin-left: 4px; padding: 8px 14px; }
+.sim-msg { margin: 0; padding: 0 16px 12px; font-size: 14px; color: var(--muted); min-height: 1.6em; max-width: none; }
+.tl-grid .tl-cell.now { background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: inset 0 2px 0 -1px color-mix(in srgb, var(--accent) 35%, transparent); }
+@media (max-width: 640px) { .sim-live { grid-template-columns: 1fr 1fr; } .sim-calls { grid-column: 1 / -1; } .sim-right { margin-left: 0; } }
+
+/* Circuit breaker playground */
+.cb-state { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; font: 600 14px var(--mono); }
+.cb-state::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.cb-state small { font: 400 12px var(--body); color: var(--muted); }
+.cb-dots { align-items: center; }
+.cb-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
+.cb-dot.on { background: var(--fail); border-color: var(--fail); }
+.cb-dot.ok { background: var(--ok); border-color: var(--ok); }
+.cb-count { font: 600 14px var(--mono); color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.call-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 700 14px var(--body); cursor: pointer; }
+.call-btn:hover { border-color: var(--accent); }
+.calls .btn { padding: 8px 14px; }
+
+/* Policy cards grid */
+.policy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 0 0 8px; }
+.policy-grid a { display: block; text-decoration: none; color: var(--fg); padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.policy-grid a:hover { border-color: var(--accent); }
+.policy-grid b { font: 500 14px var(--mono); color: var(--accent); }
+.policy-grid span { display: block; font-size: 14px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+footer { border-top: 1px solid var(--line); }
+footer .inner { max-width: 1240px; margin: 0 auto; padding-block: 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; font-size: 14px; color: var(--muted); }
+footer a { color: var(--muted); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  .hero-inner { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 40px; }
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .topbar nav { display: none; }
+  .menu-btn { display: inline-flex; }
+  .sidenav {
+    position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; width: min(86vw, 320px); max-height: none;
+    background: var(--surface); border-right: 1px solid var(--line); box-shadow: 0 0 40px rgba(0,0,0,.18);
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 20px calc(env(safe-area-inset-bottom, 0px) + 32px) max(20px, env(safe-area-inset-left, 0px));
+    transform: translateX(-104%); visibility: hidden; transition: transform .25s ease, visibility 0s linear .25s;
+    overscroll-behavior: contain;
+  }
+  .sidenav.open { transform: none; visibility: visible; transition: transform .25s ease; }
+  .nav-head { display: flex; }
+  .sidenav a { padding: 8px 10px; font-size: 15px; }
+  body.nav-open { overflow: hidden; }
+  main { padding-top: 28px; }
+}
+@media (max-width: 520px) {
+  h2 { font-size: 27px; }
+  .lede { font-size: 17px; }
+  .brand small { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top" aria-label="resilience home">
+      <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="9" width="5" height="8" rx="2" fill="var(--fail)"/>
+        <rect x="9" y="9" width="5" height="8" rx="2" fill="var(--fail)" opacity=".75"/>
+        <rect x="18" y="9" width="7" height="8" rx="2" fill="var(--ok)"/>
+      </svg>
+      resilience <small>v0.1.3</small>
+    </a>
+    <nav aria-label="Primary">
+      <a href="#usage">Guide</a>
+      <a href="#options">API</a>
+      <a href="#policies">Policies</a>
+      <a href="https://github.com/JonDotsoy/resilience">GitHub</a>
+      <a href="https://www.npmjs.com/package/@jondotsoy/resilience">npm</a>
+    </nav>
+    <button class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="sidenav"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="menu-label">Contents</span></button>
+  </div>
+</header>
+
+<div class="layout" id="top">
+  <aside class="sidenav" id="sidenav" aria-label="Contents">
+    <div class="nav-head"><b>Contents</b><button class="nav-close" id="nav-close" type="button" aria-label="Close contents">×</button></div>
+    <h4>Guide</h4>
+    <ul>
+      <li><a href="#usage">Usage</a></li>
+      <li><a href="#options">Options</a></li>
+      <li><a href="#lifecycle">Lifecycle hooks</a></li>
+      <li><a href="#control">Control</a></li>
+      <li><a href="#behavior">Behavior</a></li>
+      <li><a href="#timeouts">Timeouts</a></li>
+      <li><a href="#wait-for-task">waitForTask</a></li>
+      <li><a href="#examples">Examples</a></li>
+      <li><a href="#backoff">Backoff</a></li>
+    </ul>
+    <h4>Stateful policies</h4>
+    <ul>
+      <li><a href="#policies">Overview</a></li>
+      <li><a href="#circuit-breaker"><code>circuitBreaker</code></a></li>
+      <li><a href="#bulkhead"><code>bulkhead</code></a></li>
+      <li><a href="#throttle"><code>throttle</code></a></li>
+      <li><a href="#cache"><code>cache</code></a></li>
+      <li><a href="#dedupe"><code>dedupe</code></a></li>
+      <li><a href="#combining">Combining policies</a></li>
+    </ul>
+    <h4>Recipes</h4>
+    <ul>
+      <li><a href="#decorator">Build a decorator</a></li>
+    </ul>
+  </aside>
+
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+  <main>
+    <!-- USAGE -->
+    <section id="usage">
+      <h2>Usage<a class="anchor" href="#usage">#</a></h2>
+      <p class="section-lede">Run a function with retries, backoff, timeouts and cancellation through <code>AbortSignal</code>. Zero dependencies.</p>
+      <div class="install" style="margin-bottom:24px">
+        <span class="prompt">$</span>
+        <code id="install-cmd">npm install @jondotsoy/resilience</code>
+        <button class="copy" style="position:static" data-copy="#install-cmd">Copy</button>
+      </div>
+      <p><code>resilience(options)</code> builds an executor. Call <code>.attempt()</code> with the function you want to protect.</p>
+<div class="code"><pre data-hl><code>import { resilience } from "@jondotsoy/resilience";
+
+const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
+  fetch("https://api.example.com/data", { signal }),
+);</code></pre></div>
+      <h4 class="sub">Syntax</h4>
+<div class="code"><pre data-hl><code>resilience(options).attempt((control) => T | Promise&lt;T&gt;): Promise&lt;T&gt;</code></pre></div>
+    </section>
+
+    <!-- OPTIONS -->
+    <section id="options">
+      <h2>Options<a class="anchor" href="#options">#</a></h2>
+      <p class="section-lede">Every option is optional. With no options, the function runs once. The lifecycle hooks are listed at the end of the table.</p>
+      <div class="table-wrap"><table class="opts">
+        <colgroup><col style="width:16%"><col style="width:32%"><col style="width:12%"><col style="width:40%"></colgroup>
+        <thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>attempts</code></td><td class="type"><code>number</code></td><td class="def"><code>1</code></td><td>Number of attempts before rejecting. Must be an integer <code>&gt;= 1</code>.</td></tr>
+          <tr><td><code>signal</code></td><td class="type"><code>AbortSignal</code></td><td class="def">—</td><td>Cancels the running attempt and any pending retries.</td></tr>
+          <tr><td><code>delay</code></td><td class="type"><code>number | (ctx: DelayContext) =&gt; number</code></td><td class="def"><code>0</code></td><td>Milliseconds to wait between attempts. Pass a function to compute it per attempt. The wait is cancelled if <code>signal</code> is aborted.</td></tr>
+          <tr><td><code>retryable</code></td><td class="type"><code>(error, ctx: RetryableContext) =&gt; boolean | Promise&lt;boolean&gt;</code></td><td class="def">retries everything</td><td>If it returns <code>false</code>, rejects immediately with that error without retrying. <code>ctx</code> has <code>attempt</code> (the one that failed) and <code>attempts</code>.</td></tr>
+          <tr><td><code>timeout</code></td><td class="type"><code>number</code></td><td class="def">—</td><td>Maximum time in ms per attempt. When it expires, <code>control.signal</code> is aborted and the attempt fails with a <code>DOMException</code> <code>"TimeoutError"</code>, which can be retried.</td></tr>
+          <tr><td><code>fallback</code></td><td class="type"><code>(lastError, ctx: FallbackContext) =&gt; F | Promise&lt;F&gt;</code></td><td class="def">—</td><td>Called when the execution fails for good. Its return value becomes the result of <code>attempt</code> (the type becomes <code>T | F</code>). If it throws, <code>attempt</code> rejects with that error. Not called when <code>signal</code> is aborted.</td></tr>
+          <tr><td><code>waitForTask</code></td><td class="type"><code>boolean</code></td><td class="def"><code>true</code></td><td>What <code>attempt</code> does when <code>signal</code> is aborted or <code>timeout</code> expires. <code>true</code>: aborts <code>control.signal</code> and waits for the task. <code>false</code>: rejects right away, even if the task keeps running. See <a href="#wait-for-task">waitForTask</a>.</td></tr>
+          <tr class="group"><td colspan="4">Lifecycle hooks <span>All are optional and awaited if they return a promise. If one throws, <code>attempt</code> rejects with that error. See <a href="#lifecycle">Lifecycle hooks</a>.</span></td></tr>
+          <tr><td><code>onStart</code></td><td class="type"><code>(context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Before the first attempt. <code>attempt</code> is <code>0</code>.</td></tr>
+          <tr><td><code>onAttempt</code></td><td class="type"><code>(event: AttemptEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Before each attempt, including the first. Has <code>lastError</code>.</td></tr>
+          <tr><td><code>onTimeout</code></td><td class="type"><code>(event: TimeoutEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>When an attempt's <code>timeout</code> expires, before <code>onError</code>.</td></tr>
+          <tr><td><code>onError</code></td><td class="type"><code>(error, context: ErrorContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Every time an attempt fails. <code>context.willRetry</code> tells whether another follows.</td></tr>
+          <tr><td><code>onRetry</code></td><td class="type"><code>(event: RetryEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Before each retry, before the wait.</td></tr>
+          <tr><td><code>onSuccess</code></td><td class="type"><code>(value, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>When an attempt succeeds.</td></tr>
+          <tr><td><code>onFailure</code></td><td class="type"><code>(error, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>When it fails for good, before <code>fallback</code>.</td></tr>
+          <tr><td><code>onAbort</code></td><td class="type"><code>(reason, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>When <code>signal</code> is aborted. Neither <code>onFailure</code> nor <code>fallback</code> run.</td></tr>
+          <tr><td><code>onSettled</code></td><td class="type"><code>(event: SettledEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Always, at the end, with <code>status</code>: <code>"success"</code>, <code>"fallback"</code>, <code>"failure"</code> or <code>"aborted"</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p><code>RetryEvent</code> contains <code>attempt</code> (the attempt about to run: 2, 3, …), <code>attempts</code>, <code>error</code> (the error that caused the retry) and <code>delay</code> (ms to wait before running again). <code>DelayContext</code> contains <code>attempt</code>, <code>attempts</code> and <code>error</code>.</p>
+    </section>
+
+    <!-- LIFECYCLE -->
+    <section id="lifecycle">
+      <h2>Lifecycle hooks<a class="anchor" href="#lifecycle">#</a></h2>
+      <p class="section-lede">Besides <code>onRetry</code>, the options accept <code>on&lt;Event&gt;</code> hooks that run in this order.</p>
+      <div class="lifecycle" role="img" aria-label="onStart, then for each attempt onAttempt, onTimeout, onError, onRetry; then onSuccess or onFailure or onAbort; then onSettled">
+        <span class="hook">onStart</span><span class="arrow">→</span>
+        <div class="loop">
+          <span class="hook">onAttempt</span><span class="arrow">→</span>
+          <span class="hook opt">onTimeout?</span><span class="arrow">→</span>
+          <span class="hook opt">onError?</span><span class="arrow">→</span>
+          <span class="hook opt">onRetry?</span>
+        </div>
+        <span class="arrow">→</span>
+        <span class="hook">onSuccess</span><span class="or">or</span><span class="hook">onFailure</span><span class="or">or</span><span class="hook">onAbort</span>
+        <span class="arrow">→</span><span class="hook">onSettled</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Hook</th><th>Arguments</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>onStart</code></td><td><code>{ attempt: 0, attempts }</code></td><td>Before the first attempt.</td></tr>
+          <tr><td><code>onAttempt</code></td><td><code>{ attempt, attempts, lastError }</code></td><td>Before running each attempt, including the first.</td></tr>
+          <tr><td><code>onTimeout</code></td><td><code>{ attempt, attempts, timeout }</code></td><td>When an attempt's <code>timeout</code> expires (before <code>onError</code>).</td></tr>
+          <tr><td><code>onError</code></td><td><code>(error, { attempt, attempts, willRetry })</code></td><td>Every time an attempt fails. <code>willRetry</code> tells whether another follows.</td></tr>
+          <tr><td><code>onRetry</code></td><td><code>{ attempt, attempts, error, delay }</code></td><td>Before running again, before the wait.</td></tr>
+          <tr><td><code>onSuccess</code></td><td><code>(value, { attempt, attempts })</code></td><td>When an attempt succeeds.</td></tr>
+          <tr><td><code>onFailure</code></td><td><code>(error, { attempt, attempts })</code></td><td>When it fails for good, before <code>fallback</code>.</td></tr>
+          <tr><td><code>onAbort</code></td><td><code>(reason, { attempt, attempts })</code></td><td>When <code>signal</code> is aborted. Neither <code>onFailure</code> nor <code>fallback</code> is called.</td></tr>
+          <tr><td><code>onSettled</code></td><td><code>{ status, attempt, attempts, value?, error? }</code></td><td>Always, at the end. <code>status</code> is <code>"success"</code>, <code>"fallback"</code>, <code>"failure"</code> or <code>"aborted"</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Every hook is awaited if it returns a promise. If a hook throws, <code>attempt</code> rejects with that error.</p>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 3,
+  timeout: 2_000,
+  onAttempt: ({ attempt, attempts }) => console.log(`attempt ${attempt}/${attempts}`),
+  onError: (error, { willRetry }) => console.warn("failed", error, { willRetry }),
+  onSettled: ({ status, attempt }) => metrics.record("fetch_user", { status, attempt }),
+}).attempt(({ signal }) => getUser(id, signal));</code></pre></div>
+    </section>
+
+    <!-- CONTROL -->
+    <section id="control">
+      <h2>Control<a class="anchor" href="#control">#</a></h2>
+      <p class="section-lede">The function receives a <code>control</code> object on each attempt.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>signal</code></td><td>The attempt's <code>AbortSignal</code>. Pass it to <code>fetch</code> or any cancellable API. It is aborted when <code>options.signal</code> is aborted or when <code>options.timeout</code> expires.</td></tr>
+          <tr><td><code>attempt</code></td><td>Number of the current attempt, starting at 1.</td></tr>
+          <tr><td><code>attempts</code></td><td>Total attempts allowed.</td></tr>
+          <tr><td><code>lastError</code></td><td>Error from the previous attempt, or <code>undefined</code> on the first one.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- BEHAVIOR -->
+    <section id="behavior">
+      <h2>Behavior<a class="anchor" href="#behavior">#</a></h2>
+      <ul class="list">
+        <li>If the function resolves, <code>attempt</code> returns that value and no more attempts run.</li>
+        <li>If <code>retryable</code> returns <code>false</code>, it rejects with that error without further attempts.</li>
+        <li>If there is a <code>fallback</code>, any final failure (attempts exhausted or <code>retryable</code> returning <code>false</code>) resolves with whatever the fallback returns.</li>
+        <li>If every attempt fails and there is no <code>fallback</code>, <code>attempt</code> rejects with the error from the last attempt.</li>
+        <li>Between a failed attempt and the next one, <code>onRetry</code> is called, then it waits <code>delay</code> ms.</li>
+        <li>If <code>options.signal</code> is aborted during an attempt, <code>control.signal</code> is aborted and <code>attempt</code> waits for the task and returns its result or its error, without retrying. If it is aborted during the wait between attempts, it rejects right away with <code>signal.reason</code>. With <code>waitForTask: false</code>, it always rejects right away with <code>signal.reason</code>.</li>
+      </ul>
+    </section>
+
+    <!-- TIMEOUTS -->
+    <section id="timeouts">
+      <h2>Per-attempt vs. total timeout<a class="anchor" href="#timeouts">#</a></h2>
+      <p class="section-lede">There are two ways to set a time limit, and they can be combined.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th><code>timeout: ms</code></th><th><code>signal: AbortSignal.timeout(ms)</code></th></tr></thead>
+        <tbody>
+          <tr><td>What it limits</td><td>Each attempt separately</td><td>The whole execution, including retries and waits</td></tr>
+          <tr><td>When it expires</td><td>Aborts <code>control.signal</code> with <code>TimeoutError</code></td><td>Aborts <code>control.signal</code> with the signal's <code>reason</code></td></tr>
+          <tr><td>Retried?</td><td>Yes, it counts as one more failure</td><td>No, <code>attempt</code> rejects immediately</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 3,
+  timeout: 2_000,                      // each attempt takes at most 2 s
+  signal: AbortSignal.timeout(10_000), // and everything together, at most 10 s
+  delay: 500,
+}).attempt(({ signal }) => fetch(url, { signal }));</code></pre></div>
+      <p>In both cases <code>control.signal</code> receives the <code>abort</code> event, so passing it to <code>fetch</code> or whatever API you use is enough.</p>
+    </section>
+
+    <!-- WAIT FOR TASK -->
+    <section id="wait-for-task">
+      <h2>Wait for the task or not?<a class="anchor" href="#wait-for-task">#</a></h2>
+      <p class="section-lede">Aborting only <strong>notifies</strong> the task. If the task ignores <code>control.signal</code>, it may keep running. <code>waitForTask</code> decides what the <code>await</code> on <code>.attempt()</code> does.</p>
+<div class="code"><pre data-hl><code>// waitForTask: false: rejects as soon as the timeout expires or the signal is aborted.
+await resilience({ timeout: 1_000, waitForTask: false }).attempt(task);
+// → TimeoutError after one second, even if `task` keeps running.
+
+// Default (waitForTask: true): aborts control.signal but waits for the task to finish.
+const result = await resilience({ timeout: 1_000 }).attempt(
+  async ({ signal }) => {
+    const items: string[] = [];
+    let stop = false;
+
+    signal.addEventListener("abort", () => {
+      // signal.reason is a TimeoutError: finish the current item and stop.
+      console.warn("Time is up, saving processed items", signal.reason);
+      stop = true;
+    });
+
+    for (const item of queue) {
+      if (stop) break;
+      items.push(await process(item));
+    }
+
+    await save(items);
+    return { items, complete: !stop };
+  },
+);</code></pre></div>
+      <h3>What happens in each combination</h3>
+      <div class="bx" id="bx">
+        <div class="bx-controls">
+          <div class="seg-ctl" role="radiogroup" aria-label="Time limit">
+            <span class="seg-lbl">Limit</span>
+            <button type="button" role="radio" data-k="limit" data-v="timeout" aria-checked="true"><code>timeout</code></button>
+            <button type="button" role="radio" data-k="limit" data-v="signal" aria-checked="false"><code>signal</code></button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="waitForTask">
+            <span class="seg-lbl">waitForTask</span>
+            <button type="button" role="radio" data-k="wait" data-v="true" aria-checked="true"><code>true</code></button>
+            <button type="button" role="radio" data-k="wait" data-v="false" aria-checked="false"><code>false</code></button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Task outcome after the abort">
+            <span class="seg-lbl">Task then</span>
+            <button type="button" role="radio" data-k="task" data-v="ok" aria-checked="true">succeeds</button>
+            <button type="button" role="radio" data-k="task" data-v="fail" aria-checked="false">throws</button>
+          </div>
+        </div>
+        <div class="bx-stage">
+          <div class="bx-lane"><span class="bx-name">task</span><div class="bx-track" id="bx-task"></div></div>
+          <div class="bx-lane"><span class="bx-name"><code>attempt()</code></span><div class="bx-track" id="bx-att"></div></div>
+          <div class="bx-lane"><span class="bx-name">next</span><div class="bx-track" id="bx-next"></div></div>
+        </div>
+        <div class="bx-result">
+          <div class="bx-verdict" id="bx-verdict"></div>
+          <div class="bx-chips" id="bx-chips"></div>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Configuration</th><th>On expiry / abort</th><th>Task succeeds afterwards</th><th>Task throws afterwards</th><th>Retries?</th><th><code>fallback</code>?</th></tr></thead>
+        <tbody>
+          <tr><td><code>timeout</code></td><td>Aborts <code>control.signal</code> and waits</td><td>Returns that value</td><td>Counts as a failed attempt</td><td>Yes</td><td>If attempts run out</td></tr>
+          <tr><td><code>timeout</code> + <code>waitForTask: false</code></td><td>Rejects with <code>TimeoutError</code></td><td>Ignored</td><td>Ignored</td><td>Yes</td><td>If attempts run out</td></tr>
+          <tr><td><code>signal</code></td><td>Aborts <code>control.signal</code> and waits</td><td>Returns that value</td><td>Rejects with the task's error</td><td>No</td><td>No</td></tr>
+          <tr><td><code>signal</code> + <code>waitForTask: false</code></td><td>Rejects with <code>signal.reason</code></td><td>Ignored</td><td>Ignored</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><p>With the default value, a task that ignores <code>control.signal</code> and never finishes leaves <code>attempt</code> waiting forever, even if <code>timeout</code> expires. If the task does not listen to the abort, use <code>waitForTask: false</code>.</p></div>
+
+      <h3>A total deadline with <code>AbortSignal.timeout</code></h3>
+<div class="code"><pre data-hl><code>const result = await resilience({
+  attempts: 3,
+  delay: 1_000,
+  signal: AbortSignal.timeout(10_000),
+}).attempt(async ({ signal }) => {
+  signal.addEventListener("abort", () => {
+    // After 10 s: signal.reason is a TimeoutError.
+  });
+  return await longTask(signal);
+});</code></pre></div>
+      <p>After 10 s, counted from when the signal was created (not from each attempt):</p>
+      <ul class="list">
+        <li><strong>If an attempt is running</strong>, its <code>control.signal</code> is aborted and <code>attempt</code> waits for the task. If the task returns a value, <code>attempt</code> resolves with it (<code>status: "success"</code>). If it throws, <code>attempt</code> rejects with that error, with no retry and no <code>fallback</code> (<code>status: "aborted"</code>).</li>
+        <li><strong>If it is waiting between attempts</strong>, there is no task to wait for: <code>attempt</code> rejects right away with the <code>TimeoutError</code>.</li>
+        <li><strong>If the signal was already aborted</strong> before calling <code>attempt</code>, it rejects without running the task.</li>
+      </ul>
+      <p><code>waitForTask</code> only changes whether the running task is awaited. An aborted signal never lets a new attempt start.</p>
+    </section>
+
+    <!-- EXAMPLES -->
+    <section id="examples">
+      <h2>Examples<a class="anchor" href="#examples">#</a></h2>
+      <h3>Report retries</h3>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 5,
+  onRetry: ({ attempt, attempts, error }) => {
+    console.warn(`Retry ${attempt}/${attempts}`, error);
+  },
+}).attempt(({ signal }) => fetch(url, { signal }));</code></pre></div>
+      <h3>Wait 500 ms between attempts</h3>
+<div class="code"><pre data-hl><code>await resilience({ attempts: 3, delay: 500 }).attempt(task);</code></pre></div>
+      <h3>Fallback value when everything fails</h3>
+<div class="code"><pre data-hl><code>const user = await resilience({
+  attempts: 3,
+  fallback: async (lastError) => {
+    console.error("Could not fetch the user", lastError);
+    return null;
+  },
+}).attempt(({ signal }) => getUser(id, signal)); // User | null</code></pre></div>
+      <h3>Only retry server errors</h3>
+<div class="code"><pre data-hl><code>class HttpError extends Error {
+  constructor(public status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+await resilience({
+  attempts: 3,
+  timeout: 2_000,
+  retryable: (error) => !(error instanceof HttpError) || error.status >= 500,
+}).attempt(async ({ signal }) => {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new HttpError(res.status);
+  return res.json();
+});</code></pre></div>
+    </section>
+
+    <!-- BACKOFF -->
+    <section id="backoff">
+      <h2>Backoff<a class="anchor" href="#backoff">#</a></h2>
+      <p class="section-lede">Ready-made helpers for the <code>delay</code> option. All of them accept <code>{ maxDelay, jitter }</code>, where <code>jitter</code> is <code>"full"</code> (between 0 and the delay) or <code>"equal"</code> (between half the delay and the delay).</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Helper</th><th>Series with <code>ms = 100</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>fixedBackoff(ms)</code></td><td><code>100, 100, 100, …</code></td></tr>
+          <tr><td><code>linearBackoff(ms)</code></td><td><code>100, 200, 300, …</code></td></tr>
+          <tr><td><code>exponentialBackoff(ms, { factor })</code></td><td><code>100, 200, 400, …</code> (factor 2)</td></tr>
+          <tr><td><code>fibonacciBackoff(ms)</code></td><td><code>100, 100, 200, 300, 500, …</code></td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>import { resilience, exponentialBackoff } from "@jondotsoy/resilience";
+
+await resilience({
+  attempts: 5,
+  delay: exponentialBackoff(200, { maxDelay: 5_000, jitter: "full" }),
+  onRetry: ({ attempt, delay }) => console.warn(`Retry ${attempt} in ${delay} ms`),
+}).attempt(task);</code></pre></div>
+      <p>You can also pass your own function: <code>delay: ({ attempt, error }) =&gt; …</code>.</p>
+      <p>Every utility (backoffs, policies and errors) is also attached to the <code>resilience</code> function, so a single import is enough:</p>
+<div class="code"><pre data-hl><code>import { resilience } from "@jondotsoy/resilience";
+
+await resilience({
+  attempts: 5,
+  delay: resilience.exponentialBackoff(200, { maxDelay: 5_000 }),
+}).attempt(task);
+
+const breaker = resilience.circuitBreaker({ failureThreshold: 3 });</code></pre></div>
+    </section>
+
+    <!-- POLICIES -->
+    <section id="policies">
+      <h2>Stateful policies<a class="anchor" href="#policies">#</a></h2>
+      <p class="section-lede">Policies keep state across calls. Create each one <strong>once</strong>, for example one per service, and share it. They all expose <code>execute(fn)</code> and nest with each other and with <code>resilience</code>.</p>
+      <div class="policy-grid">
+        <a href="#circuit-breaker"><b>circuitBreaker</b><span>Stops calling a service after repeated failures, then probes it.</span></a>
+        <a href="#bulkhead"><b>bulkhead</b><span>Caps how many calls run at once, with an optional queue.</span></a>
+        <a href="#throttle"><b>throttle</b><span>At most <code>limit</code> calls in a sliding window.</span></a>
+        <a href="#cache"><b>cache</b><span>Keeps a result in memory for <code>ttl</code> ms per key.</span></a>
+        <a href="#dedupe"><b>dedupe</b><span>Merges simultaneous calls with the same key.</span></a>
+      </div>
+
+      <h3 id="circuit-breaker"><code>circuitBreaker</code><a class="anchor" href="#circuit-breaker">#</a></h3>
+      <p>After <code>failureThreshold</code> consecutive failures it <strong>opens</strong> and rejects instantly with <code>CircuitOpenError</code>. After <code>resetTimeout</code> ms it moves to <strong>half-open</strong> and lets one probe through: if it succeeds it <strong>closes</strong>, if it fails it opens again.</p>
+      <p>Two consumers, <strong>A</strong> and <strong>B</strong>, share one breaker. The playground starts with an example (<code>failureThreshold: 3</code>, <code>resetTimeout</code> of 4 steps). Each button is one call to <code>breaker.execute()</code> where the service answers with success or failure; <strong>Wait</strong> lets a step pass with no calls. Change the options to see how the circuit reacts.</p>
+<div class="sim" id="cb-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">failureThreshold</span><div class="stepper"><button type="button" data-cb="thr" data-d="-1" aria-label="Decrease failureThreshold">−</button><output id="cb-thr">3</output><button type="button" data-cb="thr" data-d="1" aria-label="Increase failureThreshold">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">resetTimeout (steps)</span><div class="stepper"><button type="button" data-cb="reset" data-d="-1" aria-label="Decrease resetTimeout (steps)">−</button><output id="cb-reset">4</output><button type="button" data-cb="reset" data-d="1" aria-label="Increase resetTimeout (steps)">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">successThreshold</span><div class="stepper"><button type="button" data-cb="succ" data-d="-1" aria-label="Decrease successThreshold">−</button><output id="cb-succ">1</output><button type="button" data-cb="succ" data-d="1" aria-label="Increase successThreshold">+</button></div></div>
+          <div class="sim-group sim-right">
+            <button type="button" class="btn" id="cb-example">Replay example</button>
+            <button type="button" class="btn" id="cb-reset">Clear</button>
+          </div>
+        </div>
+        <div class="sim-live cb-live">
+          <div class="sim-pool"><span class="seg-lbl">State</span><div class="cb-state" id="cb-state"></div></div>
+          <div class="sim-pool"><span class="seg-lbl" id="cb-meter-lbl">Consecutive failures</span><div class="boxes cb-dots" id="cb-meter"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute(): the service answers</span>
+            <div class="calls">
+              <button type="button" class="call-btn" data-who="A" data-res="o">A <i class="mk ok sm"></i></button>
+              <button type="button" class="call-btn" data-who="A" data-res="x">A <i class="mk fail sm"></i></button>
+              <button type="button" class="call-btn" data-who="B" data-res="o">B <i class="mk ok sm"></i></button>
+              <button type="button" class="call-btn" data-who="B" data-res="x">B <i class="mk fail sm"></i></button>
+              <button type="button" class="btn" id="cb-wait">Wait</button>
+            </div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="cb-grid"></div></div>
+        <p class="sim-msg" id="cb-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>successful call</span><span><i class="mk fail"></i>failed call</span><span><i class="mk rej"></i>rejected with CircuitOpenError</span><span><i class="mk probe"></i>probe call in half-open</span></figcaption>
+      </div>
+      <ul class="list">
+        <li><strong>The counter is shared.</strong> Failures from A and B add up. The third consecutive failure opens the circuit for both.</li>
+        <li><strong>A success from either one resets the counter.</strong> B's success between A's failures brings it back to 0.</li>
+        <li>While <strong>open</strong>, neither calls the service for <code>resetTimeout</code>.</li>
+        <li>After that, <strong>only one call</strong> makes the probe. B's probe fails and the circuit opens again; A's later probe succeeds and the circuit closes for both.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>failureThreshold</code></td><td class="def"><code>5</code></td><td>Consecutive failures that open the circuit.</td></tr>
+          <tr><td><code>resetTimeout</code></td><td class="def"><code>30_000</code></td><td>Ms open before probing again.</td></tr>
+          <tr><td><code>successThreshold</code></td><td class="def"><code>1</code></td><td>Successes in half-open needed to close it.</td></tr>
+          <tr><td><code>isFailure</code></td><td class="def">all</td><td><code>(error) =&gt; boolean</code>, which errors count as failures.</td></tr>
+          <tr><td><code>onStateChange</code></td><td class="def">—</td><td><code>(state, previous) =&gt; void</code>.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const breaker = circuitBreaker({ failureThreshold: 5, resetTimeout: 10_000 });
+
+await breaker.execute(() => fetch(url));
+breaker.state; // "closed" | "open" | "half-open"
+breaker.reset();</code></pre></div>
+
+      <h3 id="bulkhead"><code>bulkhead</code><a class="anchor" href="#bulkhead">#</a></h3>
+<div class="code"><pre data-hl><code>bulkhead(options) → { execute(fn, { signal }), running, queued }</code></pre></div>
+      <p>Limits how many calls run at once. If there is a free slot, the call starts. Otherwise it waits in a queue of size <code>maxQueue</code> and leaves in arrival order. With every slot and the queue full, it rejects instantly with <code>BulkheadRejectedError</code>.</p>
+      <p>Three consumers share one bulkhead. Each call lasts 2 steps. The playground starts with the example below (<code>maxConcurrent: 1</code>, <code>maxQueue: 1</code>). Pick who calls, press <strong>Next step</strong>, and change the limits to see how the slots and the queue behave.</p>
+<div class="sim" id="bh-sim">
+        <div class="sim-bar">
+          <div class="sim-group">
+            <span class="seg-lbl">maxConcurrent</span>
+            <div class="stepper"><button type="button" data-cfg="slots" data-d="-1" aria-label="Fewer slots">−</button><output id="bh-slots">1</output><button type="button" data-cfg="slots" data-d="1" aria-label="More slots">+</button></div>
+          </div>
+          <div class="sim-group">
+            <span class="seg-lbl">maxQueue</span>
+            <div class="stepper"><button type="button" data-cfg="queue" data-d="-1" aria-label="Smaller queue">−</button><output id="bh-queue">1</output><button type="button" data-cfg="queue" data-d="1" aria-label="Bigger queue">+</button></div>
+          </div>
+          <div class="sim-group sim-right">
+            <button type="button" class="btn" id="bh-example">Replay example</button>
+            <button type="button" class="btn" id="bh-reset">Clear</button>
+          </div>
+        </div>
+        <div class="sim-live">
+          <div class="sim-pool"><span class="seg-lbl">Running</span><div class="boxes" id="bh-run"></div></div>
+          <div class="sim-pool"><span class="seg-lbl">Queue</span><div class="boxes" id="bh-q"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute() at the next step</span>
+            <div class="calls">
+              <button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button>
+              <button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button>
+              <button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button>
+              <button type="button" class="btn primary" id="bh-step">Next step →</button>
+            </div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="bh-grid"></div></div>
+        <p class="sim-msg" id="bh-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>starts</span><span><i class="run run-key"></i>running</span><span><i class="mk queue"></i>waits in the queue</span><span><i class="mk rej"></i>rejected with BulkheadRejectedError</span></figcaption>
+      </div>
+      <ul class="list">
+        <li><strong>The slots are shared.</strong> Among A, B and C only one call runs at a time.</li>
+        <li>B arrives while A runs and waits in the queue. C arrives in the same step, with the slot and the queue full, and is rejected.</li>
+        <li>When A finishes, B leaves the queue and starts without calling <code>execute</code> again. The slot is released even if the call fails.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>maxConcurrent</code></td><td class="def">—</td><td>Calls in parallel.</td></tr>
+          <tr><td><code>maxQueue</code></td><td class="def"><code>0</code></td><td>Calls waiting for their turn.</td></tr>
+          <tr><td><code>signal</code></td><td class="def">—</td><td>In <code>execute</code>: cancels the wait in the queue.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const db = resilience.bulkhead({
+  maxConcurrent: 2,
+  maxQueue: 1,
+});
+
+export const query = (sql: string, signal?: AbortSignal) =>
+  db.execute(() => client.query(sql), { signal });
+
+db.running; // running
+db.queued;  // waiting</code></pre></div>
+
+      <h3 id="throttle"><code>throttle</code><a class="anchor" href="#throttle">#</a></h3>
+<div class="code"><pre data-hl><code>throttle(options) → { execute(fn), remaining }</code></pre></div>
+      <p>At most <code>limit</code> calls in any span of <code>interval</code> ms. When exceeded it rejects with <code>ThrottleError</code>, whose <code>retryAfter</code> says how many ms remain until a slot frees up. Rejected calls do not use up slots.</p>
+      <p>Three consumers share one throttle (<code>limit: 3</code>, <code>interval: 5 steps</code>):</p>
+<figure class="tl" data-tl="throttle"></figure>
+      <ul class="list">
+        <li><strong>The limit is shared.</strong> A, B and C use the 3 slots in the first step, so the next tries from A and B do not call the service.</li>
+        <li>Each <code>ThrottleError</code> carries <code>retryAfter</code>: the time left until the oldest call leaves the window.</li>
+        <li>The window is <strong>sliding</strong>: at each step, the calls from the last 5 steps count.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>limit</code></td><td class="def">—</td><td>Calls allowed per window.</td></tr>
+          <tr><td><code>interval</code></td><td class="def">—</td><td>Window size in ms.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const api = resilience.throttle({
+  limit: 3,
+  interval: 1_000, // 3 per second
+});
+
+try {
+  await api.execute(() => fetch(url));
+} catch (error) {
+  if (error instanceof resilience.ThrottleError) {
+    console.log("retry in", error.retryAfter, "ms");
+  }
+}</code></pre></div>
+
+      <h3 id="cache"><code>cache</code><a class="anchor" href="#cache">#</a></h3>
+<div class="code"><pre data-hl><code>cache(options) → { execute(key, fn), delete(key), clear(), size }</code></pre></div>
+      <p>Stores the result of <code>fn</code> in memory for a <code>key</code> during <code>ttl</code> ms, counted from when the value arrives. A request that arrives while the first call is still in flight shares that execution. Errors are not cached.</p>
+      <p>Three consumers request the same key (<code>ttl: 5 steps</code>). The service takes 2 steps to respond:</p>
+<figure class="tl" data-tl="cache"></figure>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ttl</code></td><td class="def">—</td><td>Lifetime of each entry in ms.</td></tr>
+          <tr><td><code>maxSize</code></td><td class="def">unlimited</td><td>Maximum entries. When exceeded, the oldest is evicted.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const users = resilience.cache({
+  ttl: 60_000,
+  maxSize: 500,
+});
+
+export const getUser = (id: string) =>
+  users.execute(`user:${id}`, () => fetchUser(id));
+
+users.delete("user:42"); // invalidate an entry</code></pre></div>
+
+      <h3 id="dedupe"><code>dedupe</code><a class="anchor" href="#dedupe">#</a></h3>
+<div class="code"><pre data-hl><code>dedupe() → { execute(key, fn), pending }</code></pre></div>
+      <p>If a call with the same <code>key</code> is already in flight, it returns that same promise instead of running <code>fn</code> again. It does not store results: as soon as the call finishes, the key is released. Useful when several components request the same thing at once, like the configuration at startup.</p>
+<figure class="tl" data-tl="dedupe"></figure>
+      <p>Unlike <code>cache</code>, <code>dedupe</code> only merges <strong>simultaneous</strong> requests. To reuse the value after it arrives, use <code>cache</code>.</p>
+<div class="code"><pre data-hl><code>const inFlight = resilience.dedupe();
+
+// A, B and C call almost at once: a single request
+const [a, b, c] = await Promise.all([
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig),
+]);</code></pre></div>
+
+      <h3 id="combining">Combining policies<a class="anchor" href="#combining">#</a></h3>
+      <p>The nesting order defines the behavior. A breaker on the outside makes the whole retry sequence count as a single call:</p>
+<div class="code"><pre data-hl><code>const breaker = circuitBreaker({ failureThreshold: 3 });
+const pool = bulkhead({ maxConcurrent: 10 });
+
+const getData = () =>
+  breaker.execute(() =>
+    resilience({
+      attempts: 3,
+      timeout: 2_000,
+      delay: exponentialBackoff(200),
+    }).attempt(({ signal }) => pool.execute(() => fetch(url, { signal }), { signal })),
+  );
+
+// With a fallback on the outside, even a CircuitOpenError ends in the fallback value:
+const getDataSafe = () =>
+  resilience({ fallback: () => cachedData }).attempt(getData);</code></pre></div>
+    </section>
+
+    <!-- DECORATOR -->
+    <section id="decorator">
+      <h2>Build a decorator<a class="anchor" href="#decorator">#</a></h2>
+      <p class="section-lede"><code>resilience</code> does not ship a decorator, but you can build one in a few lines with TypeScript 5 standard decorators (no <code>experimentalDecorators</code>), which Bun also supports.</p>
+      <h3>1. The decorator</h3>
+      <p>It creates the executor once and replaces the method with one that runs inside <code>attempt</code>. The attempt's <code>control</code> is appended as the last argument.</p>
+<div class="code"><pre data-hl><code>import { resilience, type Control, type ResilienceOptions } from "@jondotsoy/resilience";
+
+export function resilient&lt;This&gt;(
+  options: ResilienceOptions | ((self: This) => ResilienceOptions) = {},
+) {
+  return function &lt;Args extends unknown[], R&gt;(
+    method: (this: This, ...args: [...Args, Control?]) => R | Promise&lt;R&gt;,
+    _context: ClassMethodDecoratorContext&lt;This&gt;,
+  ) {
+    // With fixed options, a single executor for every instance.
+    const shared = typeof options === "function" ? undefined : resilience(options);
+
+    return function (this: This, ...args: Args): Promise&lt;R&gt; {
+      const r =
+        shared ?? resilience((options as (self: This) => ResilienceOptions)(this));
+      return r.attempt((control) => method.call(this, ...args, control));
+    };
+  };
+}</code></pre></div>
+      <h3>2. Use it in a class</h3>
+      <p>Declare <code>control</code> as the last, optional parameter. Callers do not pass it: the decorator supplies it on each attempt.</p>
+<div class="code"><pre data-hl><code>class UsersApi {
+  @resilient({
+    attempts: 3,
+    timeout: 2_000,
+    delay: resilience.exponentialBackoff(200),
+  })
+  async getUser(id: string, control?: Control) {
+    const res = await fetch(`https://api.example.com/users/${id}`, {
+      signal: control?.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+}
+
+const user = await new UsersApi().getUser("42");</code></pre></div>
+      <h3>3. Per-instance options</h3>
+      <p>If each object has its own <code>AbortController</code>, pass a function that receives the instance. The executor is then created on every call.</p>
+<div class="code"><pre data-hl><code>class Worker {
+  readonly abort = new AbortController();
+
+  @resilient((self: Worker) => ({ attempts: 3, signal: self.abort.signal }))
+  async process(job: Job, control?: Control) {
+    // ...
+  }
+
+  close() {
+    this.abort.abort();
+  }
+}</code></pre></div>
+      <h3>4. Add stateful policies</h3>
+      <p>Create policies outside the class so every instance shares them, then use them inside the method with <code>execute</code>.</p>
+<div class="code"><pre data-hl><code>const breaker = resilience.circuitBreaker({ failureThreshold: 5 });
+
+class PaymentsApi {
+  @resilient({ attempts: 3, delay: resilience.exponentialBackoff(200) })
+  async charge(order: Order, control?: Control) {
+    return breaker.execute(() =>
+      fetch("https://payments.example.com/charge", {
+        method: "POST",
+        body: JSON.stringify(order),
+        signal: control?.signal,
+      }),
+    );
+  }
+}</code></pre></div>
+      <div class="note">
+        <p><code>control</code> always goes last, after the arguments the caller passed. If optional parameters before it are omitted, it lands in a different position, so prefer fixed parameters or an options object. With fixed options, the configuration is shared by every instance. The decorated method always returns a promise.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="inner">
+    <span>MIT License · Jonathan Delgado</span>
+    <span><a href="https://github.com/JonDotsoy/resilience">GitHub</a> · <a href="https://www.npmjs.com/package/@jondotsoy/resilience">npm</a> · <a href="https://jon.soy">jon.soy</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // --- Tiny TypeScript highlighter (no dependencies) ---
+  var KW = /^(import|from|export|const|let|var|await|async|function|return|if|else|for|of|in|new|class|extends|constructor|public|readonly|throw|try|catch|typeof|instanceof|type|this|true|false|null|undefined|break|as)$/;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function highlight(src) {
+    var re = /(\/\/[^\n]*)|(`(?:\\.|[^`])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b(\d[\d_]*(?:\.\d+)?)\b|([A-Za-z_$][\w$]*)(?=\s*\()|([A-Za-z_$][\w$]*)/g;
+    var out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-c">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-s">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-n">' + m[3] + "</span>";
+      else if (m[4]) out += KW.test(m[4]) ? '<span class="tok-k">' + m[4] + "</span>" : '<span class="tok-f">' + m[4] + "</span>";
+      else out += KW.test(m[5]) ? '<span class="tok-k">' + m[5] + "</span>" : m[5];
+      last = re.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+  document.querySelectorAll("pre[data-hl] code").forEach(function (el) {
+    el.innerHTML = highlight(el.textContent);
+  });
+
+  // --- Copy buttons on code blocks ---
+  function copyText(text, btn) {
+    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1400); };
+    try {
+      navigator.clipboard.writeText(text).then(done, function () { selectFallback(btn); });
+    } catch (e) { selectFallback(btn); }
+  }
+  function selectFallback(btn) {
+    var target = btn.parentElement.querySelector("code, pre");
+    if (!target) return;
+    var r = document.createRange(); r.selectNodeContents(target);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    btn.textContent = "Press ⌘C";
+  }
+  document.querySelectorAll(".code").forEach(function (box) {
+    var b = document.createElement("button");
+    b.className = "copy"; b.type = "button"; b.textContent = "Copy";
+    b.addEventListener("click", function () { copyText(box.querySelector("pre").textContent, b); });
+    box.appendChild(b);
+    var l = document.createElement("span"); l.className = "lang"; l.textContent = "ts"; box.appendChild(l);
+  });
+  document.querySelectorAll("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () { copyText(document.querySelector(b.dataset.copy).textContent, b); });
+  });
+
+  // --- Colorize glyphs in timeline diagrams ---
+  var G = { "●": "g-ok", "✕": "g-fail", "○": "g-rej", "◐": "g-probe", "◷": "g-queue", "◆": "g-hit", "◌": "g-share" };
+  document.querySelectorAll("pre[data-glyphs]").forEach(function (el) {
+    el.innerHTML = esc(el.textContent).replace(/[●✕○◐◷◆◌]/g, function (c) { return '<span class="' + G[c] + '">' + c + "</span>"; });
+  });
+
+  // --- Visual timelines for stateful policies ---
+  // Tokens per step: o ok/call, x fail, r rejected, P probe ok, F probe fail, q queued, - running, h hit, s share, S share failed, . empty
+  var MK = {
+    o: '<i class="mk ok"></i>', x: '<i class="mk fail"></i>', r: '<i class="mk rej"></i>',
+    P: '<i class="mk probe sm"></i><i class="mk ok sm"></i>', F: '<i class="mk probe sm"></i><i class="mk fail sm"></i>',
+    q: '<i class="mk queue"></i>', "-": '<i class="run"></i>', h: '<i class="mk hit"></i>',
+    s: '<i class="mk share"></i>', S: '<i class="mk share sm"></i><i class="mk fail sm"></i>'
+  };
+  var LEGEND_MK = { o: MK.o, x: MK.x, r: MK.r, p: '<i class="mk probe"></i>', q: MK.q, "-": '<i class="run run-key"></i>', h: MK.h, s: MK.s, S: MK.S };
+  var TL = {
+    circuit: {
+      label: "Circuit breaker timeline shared by consumers A and B",
+      phases: [[1, 7, "closed", "closed"], [8, 11, "open", "open · 10 s"], [12, 12, "half", "half"], [13, 15, "open", "open · 10 s"], [16, 16, "half", "half"], [17, 18, "closed", "closed"]],
+      rows: [["A", "o.x.x.x.r.r.r.rP.o"], ["B", ".o.o.x.r.r.F.r..o."]],
+      meters: [["failures", [0, 0, 1, 0, 1, 2, 3, "", "", "", "", "", "", "", "", "", 0, 0], 3]],
+      legend: [["o", "successful call"], ["x", "failed call, counts toward failureThreshold"], ["r", "rejected with CircuitOpenError"], ["p", "probe call in half-open"]]
+    },
+    bulkhead: {
+      label: "Bulkhead timeline shared by consumers A, B and C",
+      rows: [["A", "o-...qo-"], ["B", ".qo-...."], ["C", ".r.qo-.."]],
+      meters: [["running", [1, 1, 1, 1, 1, 1, 1, 1]], ["queued", ["", 1, "", 1, "", 1, "", ""]]],
+      legend: [["o", "starts"], ["-", "running"], ["q", "waits in the queue"], ["r", "rejected with BulkheadRejectedError"]]
+    },
+    throttle: {
+      label: "Throttle timeline shared by consumers A, B and C",
+      rows: [["A", "or...o.....o"], ["B", "o.r...o....o"], ["C", "o....o.r...."]],
+      meters: [["slots left", [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 1]]],
+      legend: [["o", "allowed"], ["r", "rejected with ThrottleError"]]
+    },
+    cache: {
+      label: "Cache timeline for one key shared by consumers A, B and C",
+      rows: [["A", "o-..h....S...h.."], ["B", ".s....h....o-..."], ["C", "..h.....x-..s..."]],
+      meters: [["ttl", ["", "", 5, 4, 3, 2, 1, "", "", "", "", "", "", 5, 4, 3]]],
+      legend: [["o", "miss, calls the service"], ["-", "waiting for the response"], ["h", "hit"], ["s", "shares the in-flight call"], ["x", "failing miss, not cached"], ["S", "shared call that failed"]]
+    },
+    dedupe: {
+      label: "Dedupe timeline for one key shared by consumers A, B and C",
+      rows: [["A", "o-.s....S...."], ["B", ".s...o-...o-."], ["C", "..o-....x-..s"]],
+      meters: [["pending", [1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0]]],
+      legend: [["o", "calls the service"], ["-", "waiting for the response"], ["s", "receives the same promise"], ["x", "failing call"], ["S", "shared call that failed"]]
+    }
+  };
+  document.querySelectorAll("figure.tl[data-tl]").forEach(function (fig) {
+    var d = TL[fig.dataset.tl]; if (!d) return;
+    var n = d.rows[0][1].length, h = "";
+    var phaseAt = [];
+    if (d.phases) {
+      h += '<div class="tl-lbl">state</div>';
+      d.phases.forEach(function (p) {
+        for (var k = p[0]; k <= p[1]; k++) phaseAt[k] = p[2];
+        h += '<div class="tl-phase ph-' + p[2] + '" style="grid-column:' + (p[0] + 1) + " / " + (p[1] + 2) + '">' + p[3] + "</div>";
+      });
+    }
+    d.rows.forEach(function (r) {
+      h += '<div class="tl-lbl who">' + r[0] + "</div>";
+      for (var i = 0; i < n; i++) h += '<div class="tl-cell">' + (MK[r[1][i]] || "") + "</div>";
+    });
+    (d.meters || []).forEach(function (m) {
+      h += '<div class="tl-lbl">' + m[0] + "</div>";
+      m[1].forEach(function (v) { h += '<div class="tl-cell meter' + (m[2] !== undefined && v === m[2] ? " hot" : "") + '">' + v + "</div>"; });
+    });
+    h += '<div class="tl-axis">time</div>';
+    var lg = d.legend.map(function (l) { return "<span>" + LEGEND_MK[l[0]] + l[1] + "</span>"; }).join("");
+    fig.setAttribute("role", "img"); fig.setAttribute("aria-label", d.label);
+    fig.innerHTML = '<div class="tl-scroll"><div class="tl-grid" style="--n:' + n + '">' + h + '</div></div><figcaption class="tl-legend">' + lg + "</figcaption>";
+  });
+
+  function followNow(g) {
+    var sc = g.parentElement, now = g.querySelector(".tl-cell.now");
+    sc.scrollLeft = now ? Math.max(0, now.offsetLeft + now.offsetWidth + 24 - sc.clientWidth) : 0;
+  }
+  // --- Circuit breaker playground ---
+  (function () {
+    var MAXSTEPS = 30;
+    var cfg = { thr: 3, reset: 4, succ: 1 };
+    var LIM = { thr: [1, 6], reset: [1, 8], succ: [1, 3] };
+    var st;
+    var EXAMPLE = [["A","o"],["B","o"],["A","x"],["B","o"],["A","x"],["B","x"],["A","x"],["B","o"],["A","o"],["B","o"],["A","o"],["B","x"],["A","o"],["B","o"],["A","o"],["B","o"],["A","o"],["B","o"],["A","o"]];
+    function reset() { st = { t: 0, state: "closed", fails: 0, succ: 0, openedAt: 0, hist: [] }; }
+    function step(who, res) {
+      st.t++;
+      var notes = [];
+      if (st.state === "open" && st.t - st.openedAt > cfg.reset) { st.state = "half"; st.succ = 0; notes.push("resetTimeout elapsed, the circuit is half-open"); }
+      var phase = st.state, row = { A: ".", B: "." };
+      if (who) {
+        if (st.state === "open") { row[who] = "r"; notes.push(who + " is rejected with CircuitOpenError without calling the service"); }
+        else if (st.state === "half") {
+          row[who] = res === "o" ? "P" : "F";
+          if (res === "o") {
+            st.succ++;
+            if (st.succ >= cfg.succ) { st.state = "closed"; st.fails = 0; notes.push(who + "'s probe succeeds and the circuit closes"); }
+            else notes.push(who + "'s probe succeeds (" + st.succ + "/" + cfg.succ + ")");
+          } else { st.state = "open"; st.openedAt = st.t; notes.push(who + "'s probe fails and the circuit opens again"); }
+        } else {
+          row[who] = res;
+          if (res === "o") { notes.push(who + " succeeds" + (st.fails ? " and resets the counter" : "")); st.fails = 0; }
+          else {
+            st.fails++;
+            if (st.fails >= cfg.thr) { st.state = "open"; st.openedAt = st.t; notes.push(who + " fails: " + st.fails + " in a row, the circuit opens"); }
+            else notes.push(who + " fails (" + st.fails + "/" + cfg.thr + ")");
+          }
+        }
+      } else notes.push("no calls");
+      st.hist.push({ row: row, phase: phase, fails: phase === "closed" ? st.fails : "" });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      return notes;
+    }
+    var STATE_TXT = { closed: ["closed", "calls go through"], open: ["open", "calls are rejected"], half: ["half-open", "next call is a probe"] };
+    var PH_CLS = { closed: "ph-closed", open: "ph-open", half: "ph-half" };
+    function render(msg) {
+      Object.keys(cfg).forEach(function (k) { document.getElementById("cb-" + k).textContent = cfg[k]; });
+      document.querySelectorAll("#cb-sim [data-cb]").forEach(function (b) {
+        var k = b.dataset.cb, v = cfg[k] + (+b.dataset.d); b.disabled = v < LIM[k][0] || v > LIM[k][1];
+      });
+      var stEl = document.getElementById("cb-state"), cur = st.state;
+      if (cur === "open" && st.t + 1 - st.openedAt > cfg.reset) cur = "openready";
+      var txt = cur === "openready" ? ["open", "next step goes half-open"] : STATE_TXT[cur];
+      var col = cur === "closed" ? "var(--ok)" : cur === "half" ? "var(--wait)" : "var(--fail)";
+      stEl.innerHTML = txt[0] + " <small>" + txt[1] + "</small>";
+      stEl.style.color = col; stEl.style.background = "color-mix(in srgb, " + col + " 12%, transparent)";
+      var m = "", lbl = document.getElementById("cb-meter-lbl");
+      if (st.state === "closed") { lbl.textContent = "Consecutive failures"; for (var i = 0; i < cfg.thr; i++) m += '<i class="cb-dot' + (i < st.fails ? " on" : "") + '"></i>'; m += '<span class="cb-count">' + st.fails + "/" + cfg.thr + "</span>"; }
+      else if (st.state === "open") { lbl.textContent = "Steps until half-open"; var left = Math.max(0, cfg.reset - (st.t - st.openedAt)); for (var j = 0; j < cfg.reset; j++) m += '<i class="cb-dot' + (j < left ? " on" : "") + '"></i>'; m += '<span class="cb-count">' + left + "</span>"; }
+      else { lbl.textContent = "Probe successes"; for (var k2 = 0; k2 < cfg.succ; k2++) m += '<i class="cb-dot' + (k2 < st.succ ? " ok" : "") + '"></i>'; m += '<span class="cb-count">' + st.succ + "/" + cfg.succ + "</span>"; }
+      document.getElementById("cb-meter").innerHTML = m;
+      var n = Math.max(st.hist.length, 10), h = '<div class="tl-lbl">state</div>';
+      var i0 = 0;
+      while (i0 < st.hist.length) {
+        var ph = st.hist[i0].phase, i1 = i0;
+        while (i1 + 1 < st.hist.length && st.hist[i1 + 1].phase === ph) i1++;
+        var span = i1 - i0 + 1, name = ph === "half" ? "half" : ph;
+        if (ph === "open" && span >= 3) name = "open · " + span + " steps";
+        h += '<div class="tl-phase ' + PH_CLS[ph] + '" style="grid-column:' + (i0 + 2) + " / " + (i1 + 3) + '">' + name + "</div>";
+        i0 = i1 + 1;
+      }
+      if (st.hist.length < n) h += '<div style="grid-column:' + (st.hist.length + 2) + ' / -1"></div>';
+      ["A", "B"].forEach(function (w) {
+        h += '<div class="tl-lbl who">' + w + "</div>";
+        for (var c = 0; c < n; c++) { var e = st.hist[c]; h += '<div class="tl-cell' + (c === st.hist.length - 1 ? " now" : "") + '">' + (e ? (MK[e.row[w]] || "") : "") + "</div>"; }
+      });
+      h += '<div class="tl-lbl">failures</div>';
+      for (var c2 = 0; c2 < n; c2++) { var e2 = st.hist[c2]; h += '<div class="tl-cell meter' + (e2 && e2.fails !== "" && e2.fails >= cfg.thr ? " hot" : "") + '">' + (e2 ? e2.fails : "") + "</div>"; }
+      h += '<div class="tl-axis">time</div>';
+      var g = document.getElementById("cb-grid"); g.style.setProperty("--n", n); g.innerHTML = h;
+      followNow(g);
+      document.getElementById("cb-msg").textContent = msg || "";
+    }
+    function playExample() {
+      cfg = { thr: 3, reset: 4, succ: 1 }; reset();
+      EXAMPLE.forEach(function (c) { step(c[0], c[1]); });
+      render("Example: failureThreshold 3, resetTimeout 4 steps. Make calls to continue.");
+    }
+    document.querySelectorAll("#cb-sim .call-btn").forEach(function (b) {
+      b.addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(b.dataset.who, b.dataset.res).join(". ") + "."); });
+    });
+    document.getElementById("cb-wait").addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(null).join(". ") + "."); });
+    document.querySelectorAll("#cb-sim [data-cb]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        cfg[b.dataset.cb] += +b.dataset.d;
+        if (st.state === "closed" && st.fails >= cfg.thr) { st.fails = cfg.thr - 1; }
+        render("failureThreshold " + cfg.thr + ", resetTimeout " + cfg.reset + " steps, successThreshold " + cfg.succ + ".");
+      });
+    });
+    document.getElementById("cb-reset").addEventListener("click", function () { reset(); render("Cleared. The circuit starts closed."); });
+    document.getElementById("cb-example").addEventListener("click", playExample);
+    playExample();
+  })();
+
+  // --- Bulkhead playground ---
+  (function () {
+    var DUR = 2, MAXSTEPS = 24;
+    var cfg = { slots: 1, queue: 1 };
+    var st, pending = {};
+    var EXAMPLE = [["A"], ["B", "C"], [], ["C"], [], ["A"], [], []];
+    function reset() { st = { t: 0, running: [], queue: [], hist: [] }; pending = {}; }
+    function step(arrivals) {
+      var row = { A: ".", B: ".", C: "." }, notes = [];
+      st.running.forEach(function (r) { r.left--; });
+      st.running = st.running.filter(function (r) { if (r.left > 0) { row[r.who] = "-"; return true; } notes.push(r.who + " finishes"); return false; });
+      while (st.running.length < cfg.slots && st.queue.length) {
+        var w = st.queue.shift(); st.running.push({ who: w, left: DUR }); row[w] = "o"; notes.push(w + " leaves the queue and starts");
+      }
+      arrivals.forEach(function (w) {
+        if (st.running.some(function (r) { return r.who === w; }) || st.queue.indexOf(w) >= 0) { notes.push(w + " is already busy"); return; }
+        if (st.running.length < cfg.slots) { st.running.push({ who: w, left: DUR }); row[w] = "o"; notes.push(w + " starts"); }
+        else if (st.queue.length < cfg.queue) { st.queue.push(w); row[w] = "q"; notes.push(w + " waits in the queue"); }
+        else { row[w] = "r"; notes.push(w + " is rejected with BulkheadRejectedError"); }
+      });
+      st.t++;
+      st.hist.push({ row: row, running: st.running.length, queued: st.queue.length });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      return notes;
+    }
+    function render(msg) {
+      document.getElementById("bh-slots").textContent = cfg.slots;
+      document.getElementById("bh-queue").textContent = cfg.queue;
+      document.querySelectorAll("#bh-sim [data-cfg]").forEach(function (b) {
+        var k = b.dataset.cfg, d = +b.dataset.d, v = cfg[k] + d;
+        b.disabled = k === "slots" ? (v < 1 || v > 3) : (v < 0 || v > 3);
+      });
+      var run = "";
+      for (var i = 0; i < cfg.slots; i++) {
+        var r = st.running[i];
+        run += r ? '<div class="box busy">' + r.who + '<i style="width:' + ((DUR - r.left + 1) / DUR * 100) + '%"></i></div>' : '<div class="box"></div>';
+      }
+      document.getElementById("bh-run").innerHTML = run;
+      var q = "";
+      for (var j = 0; j < cfg.queue; j++) q += st.queue[j] ? '<div class="box waiting">' + st.queue[j] + "</div>" : '<div class="box"></div>';
+      document.getElementById("bh-q").innerHTML = q || '<div class="box none">no queue</div>';
+      document.querySelectorAll("#bh-sim .who-btn").forEach(function (b) { b.setAttribute("aria-pressed", String(!!pending[b.dataset.who])); });
+      var n = Math.max(st.hist.length, 8), h = "";
+      ["A", "B", "C"].forEach(function (w) {
+        h += '<div class="tl-lbl who">' + w + "</div>";
+        for (var k = 0; k < n; k++) { var e = st.hist[k]; h += '<div class="tl-cell' + (k === st.hist.length - 1 ? " now" : "") + '">' + (e ? (MK[e.row[w]] || "") : "") + "</div>"; }
+      });
+      [["running", "running"], ["queued", "queued"]].forEach(function (m) {
+        h += '<div class="tl-lbl">' + m[0] + "</div>";
+        for (var k = 0; k < n; k++) { var e = st.hist[k]; h += '<div class="tl-cell meter">' + (e ? (e[m[1]] || (m[1] === "queued" ? "" : 0)) : "") + "</div>"; }
+      });
+      h += '<div class="tl-axis">time</div>';
+      var g = document.getElementById("bh-grid");
+      g.style.setProperty("--n", n); g.innerHTML = h;
+      followNow(g);
+      document.getElementById("bh-msg").textContent = msg || "";
+    }
+    function playExample() {
+      cfg.slots = 1; cfg.queue = 1; reset();
+      EXAMPLE.forEach(function (a) { step(a); });
+      render("Example: maxConcurrent 1, maxQueue 1. Pick who calls and press Next step to continue.");
+    }
+    document.querySelectorAll("#bh-sim .who-btn").forEach(function (b) {
+      b.addEventListener("click", function () { var w = b.dataset.who; if (pending[w]) delete pending[w]; else pending[w] = true; render(document.getElementById("bh-msg").textContent); });
+    });
+    document.getElementById("bh-step").addEventListener("click", function () {
+      var arr = ["A", "B", "C"].filter(function (w) { return pending[w]; });
+      pending = {};
+      var notes = step(arr);
+      var still = st.running.filter(function (r) { return r.left < DUR; }).map(function (r) { return r.who + " keeps running"; });
+      var all = notes.concat(still);
+      render("Step " + st.t + ": " + (all.length ? all.join(", ") + "." : "nothing happens."));
+    });
+    document.querySelectorAll("#bh-sim [data-cfg]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        cfg[b.dataset.cfg] += +b.dataset.d;
+        while (st.queue.length > cfg.queue) st.queue.pop();
+        render("maxConcurrent " + cfg.slots + ", maxQueue " + cfg.queue + ". New limits apply from the next step.");
+      });
+    });
+    document.getElementById("bh-reset").addEventListener("click", function () { reset(); render("Cleared. Pick who calls and press Next step."); });
+    document.getElementById("bh-example").addEventListener("click", playExample);
+    playExample();
+  })();
+
+  // --- waitForTask behavior explorer ---
+  var bx = { limit: "timeout", wait: "true", task: "ok" };
+  var ABORT = 38, END = 72;
+  function bar(cls, from, to, label) { return '<div class="bx-bar ' + cls + '" style="left:' + from + "%;width:" + (to - from) + '%">' + (label ? "<span>" + label + "</span>" : "") + "</div>"; }
+  function pin(cls, at, sym, label, left) {
+    return '<i class="bx-pin ' + cls + '" style="left:' + at + '%">' + sym + "</i>" +
+      (label ? '<span class="bx-pin-lbl' + (left ? " left" : "") + '" style="left:calc(' + at + "% " + (left ? "- 16px" : "+ 16px") + ')">' + label + "</span>" : "");
+  }
+  function renderBx() {
+    var t = bx.limit === "timeout", w = bx.wait === "true", ok = bx.task === "ok";
+    var reason = t ? "TimeoutError" : "signal.reason";
+    var abortLbl = t ? "timeout expires" : "signal aborts";
+    var abortMark = '<div class="bx-abort" style="left:' + ABORT + '%"><b>' + abortLbl + "</b></div>";
+    // task lane
+    var taskHtml = bar("run", 0, ABORT, "running") + bar(w ? "run" : "ghost", ABORT, END, w ? "finishing" : "keeps running, ignored") +
+      pin(w ? (ok ? "ok" : "fail") : "ignored", END, ok ? "✓" : "✕", "") + abortMark;
+    // attempt lane
+    var settle = w ? END : ABORT, att, verdict, retry, fb, status;
+    if (w && ok) { att = pin("ok", settle, "✓", "resolves with the value", true); verdict = "<code>attempt</code> waits for the task and <strong>resolves with its value</strong>."; retry = false; fb = false; status = "success"; }
+    else if (w && !ok && t) { att = pin("fail", settle, "✕", "attempt failed", true); verdict = "The task's error <strong>counts as a failed attempt</strong>. Another attempt runs, or <code>fallback</code> if attempts run out."; retry = true; fb = true; status = "failure / fallback"; }
+    else if (w && !ok && !t) { att = pin("fail", settle, "✕", "rejects with the task's error", true); verdict = "<code>attempt</code> waits, then <strong>rejects with the task's error</strong>. No retry and no <code>fallback</code>."; retry = false; fb = false; status = "aborted"; }
+    else if (t) { att = pin("fail", settle, "✕", "rejects with TimeoutError"); verdict = "<code>attempt</code> <strong>fails right away with <code>TimeoutError</code></strong>. The task keeps running and its result is ignored. Another attempt runs, or <code>fallback</code> if attempts run out."; retry = true; fb = true; status = "failure / fallback"; }
+    else { att = pin("fail", settle, "✕", "rejects with signal.reason"); verdict = "<code>attempt</code> <strong>rejects right away with <code>signal.reason</code></strong>. The task keeps running and its result is ignored. No retry and no <code>fallback</code>."; retry = false; fb = false; status = "aborted"; }
+    document.getElementById("bx-task").innerHTML = taskHtml;
+    document.getElementById("bx-att").innerHTML = att + '<div class="bx-abort" style="left:' + ABORT + '%"></div>';
+    var nx = retry ? bar("next", Math.min(settle + 6, 90), 100, "attempt #2 (after delay)") : '<span class="bx-empty">no more attempts</span>';
+    document.getElementById("bx-next").innerHTML = nx;
+    document.getElementById("bx-verdict").innerHTML = verdict;
+    document.getElementById("bx-chips").innerHTML =
+      '<span class="chip ' + (retry ? "yes" : "no") + '">retries: ' + (retry ? "yes" : "no") + "</span>" +
+      '<span class="chip ' + (fb ? "yes" : "no") + '">fallback: ' + (fb ? "if attempts run out" : "no") + "</span>" +
+      '<span class="chip">status: ' + status + "</span>";
+  }
+  document.querySelectorAll("#bx [data-k]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      bx[btn.dataset.k] = btn.dataset.v;
+      document.querySelectorAll('#bx [data-k="' + btn.dataset.k + '"]').forEach(function (b) { b.setAttribute("aria-checked", String(b === btn)); });
+      renderBx();
+    });
+  });
+  renderBx();
+
+  // --- Mobile contents drawer ---
+  var nav = document.getElementById("sidenav"), mb = document.getElementById("menu-btn");
+  var backdrop = document.getElementById("nav-backdrop"), menuLabel = document.getElementById("menu-label");
+  function setNav(open) {
+    nav.classList.toggle("open", open);
+    backdrop.hidden = !open;
+    document.body.classList.toggle("nav-open", open);
+    mb.setAttribute("aria-expanded", String(open));
+    if (open) { var act = nav.querySelector("a.active") || nav.querySelector("a"); act.scrollIntoView({ block: "center" }); act.focus({ preventScroll: true }); }
+  }
+  mb.addEventListener("click", function () { setNav(!nav.classList.contains("open")); });
+  document.getElementById("nav-close").addEventListener("click", function () { setNav(false); mb.focus(); });
+  backdrop.addEventListener("click", function () { setNav(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && nav.classList.contains("open")) { setNav(false); mb.focus(); } });
+  nav.addEventListener("click", function (e) { if (e.target.closest("a")) setNav(false); });
+
+  // --- Scrollspy ---
+  var links = Array.prototype.slice.call(nav.querySelectorAll("a"));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  function spy() {
+    var y = window.scrollY + 120, idx = 0;
+    targets.forEach(function (t, i) { if (t && t.getBoundingClientRect().top + window.scrollY <= y) idx = i; });
+    links.forEach(function (a, i) { a.classList.toggle("active", i === idx); });
+    if (links[idx]) menuLabel.textContent = links[idx].textContent;
+  }
+  window.addEventListener("scroll", spy, { passive: true }); spy();
+})();
+</script>
+</body>
+</html>
