@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>resilience: reintentos, timeout y circuit breaker en TypeScript</title>
+<meta name="description" content="Ejecuta cualquier función con reintentos, backoff, timeout por intento y cancelación con AbortSignal. Circuit breaker, bulkhead, throttle y caché. Sin dependencias.">
+<meta name="keywords" content="reintentos, retry, backoff, timeout, AbortSignal, circuit breaker, bulkhead, throttle, fallback, TypeScript, JavaScript, npm">
+<meta name="author" content="Jonathan Delgado">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="https://jondotsoy.github.io/resilience/es/">
+<link rel="alternate" hreflang="en" href="https://jondotsoy.github.io/resilience/">
+<link rel="alternate" hreflang="es" href="https://jondotsoy.github.io/resilience/es/">
+<link rel="alternate" hreflang="x-default" href="https://jondotsoy.github.io/resilience/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1117" media="(prefers-color-scheme: dark)">
+<script>try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="resilience">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:url" content="https://jondotsoy.github.io/resilience/es/">
+<meta property="og:title" content="resilience: reintentos, timeout y circuit breaker en TypeScript">
+<meta property="og:description" content="Reintentos, backoff, timeouts y cancelación con AbortSignal para cualquier función. Circuit breaker y más. Sin dependencias.">
+<meta property="og:image" content="https://jondotsoy.github.io/resilience/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="resilience: reintentos, timeouts y circuit breakers para TypeScript. npm i @jondotsoy/resilience">
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="resilience: reintentos, timeout y circuit breaker en TypeScript">
+<meta name="twitter:description" content="Ejecuta cualquier función con reintentos, backoff, timeouts y cancelación con AbortSignal. Sin dependencias.">
+<meta name="twitter:image" content="https://jondotsoy.github.io/resilience/og-image.png">
+<meta name="twitter:image:alt" content="resilience: reintentos, timeouts y circuit breakers para TypeScript. npm i @jondotsoy/resilience">
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://jondotsoy.github.io/resilience/#library",
+      "name": "@jondotsoy/resilience",
+      "alternateName": "resilience",
+      "description": "Run a function with retries, backoff, per-attempt timeouts and cancellation through AbortSignal, plus circuit breaker, bulkhead, throttle, cache and dedupe policies. Zero dependencies.",
+      "url": "https://jondotsoy.github.io/resilience/",
+      "codeRepository": "https://github.com/JonDotsoy/resilience",
+      "programmingLanguage": ["TypeScript", "JavaScript"],
+      "version": "0.1.3",
+      "license": "https://opensource.org/licenses/MIT",
+      "keywords": ["retry", "backoff", "timeout", "AbortSignal", "circuit breaker", "bulkhead", "fallback"],
+      "image": "https://jondotsoy.github.io/resilience/og-image.png",
+      "sameAs": ["https://www.npmjs.com/package/@jondotsoy/resilience"],
+      "author": { "@id": "https://jon.soy/#person" }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://jon.soy/#person",
+      "name": "Jonathan Delgado",
+      "url": "https://jon.soy",
+      "sameAs": ["https://github.com/JonDotsoy"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://jondotsoy.github.io/resilience/#website",
+      "name": "resilience docs",
+      "url": "https://jondotsoy.github.io/resilience/",
+      "inLanguage": ["en", "es"],
+      "about": { "@id": "https://jondotsoy.github.io/resilience/#library" },
+      "author": { "@id": "https://jon.soy/#person" }
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip-link" href="#content">Ir al contenido</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top" aria-label="Inicio de resilience">
+      <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="9" width="5" height="8" rx="2" fill="var(--fail)"/>
+        <rect x="9" y="9" width="5" height="8" rx="2" fill="var(--fail)" opacity=".75"/>
+        <rect x="18" y="9" width="7" height="8" rx="2" fill="var(--ok)"/>
+      </svg>
+      resilience <small>v0.1.3</small>
+    </a>
+    <nav aria-label="Principal">
+      <a href="#usage">Guía</a>
+      <a href="#options">API</a>
+      <a href="#policies">Políticas</a>
+      <a href="https://github.com/JonDotsoy/resilience">GitHub</a>
+      <a href="https://www.npmjs.com/package/@jondotsoy/resilience">npm</a>
+    </nav>
+    <button class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="sidenav"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="menu-label">Contenido</span></button>
+    <div class="prefs">
+      <a class="pref-btn lang-btn" id="lang-btn" href="../" hreflang="en" lang="en" title="Read in English" aria-label="Read in English"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.75 8h12.5M8 1.75c1.8 1.7 2.6 3.8 2.6 6.25S9.8 12.55 8 14.25C6.2 12.55 5.4 10.45 5.4 8S6.2 3.45 8 1.75Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>EN</span></a>
+      <div class="theme-pick">
+        <button type="button" class="pref-btn" id="theme-btn" data-pref="system" aria-haspopup="true" aria-expanded="false" aria-controls="theme-menu" aria-label="Tema: Sistema" title="Tema: Sistema"><svg class="i-light" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><svg class="i-dark" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 10.2A5.8 5.8 0 0 1 5.8 2.4a5.8 5.8 0 1 0 7.8 7.8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="i-system" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <div class="theme-menu" id="theme-menu" role="menu" aria-label="Tema" hidden>
+          <button type="button" role="menuitemradio" data-theme-set="light" aria-checked="false"><svg class="i-light" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Claro</button>
+          <button type="button" role="menuitemradio" data-theme-set="dark" aria-checked="false"><svg class="i-dark" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 10.2A5.8 5.8 0 0 1 5.8 2.4a5.8 5.8 0 1 0 7.8 7.8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Oscuro</button>
+          <button type="button" role="menuitemradio" data-theme-set="system" aria-checked="true"><svg class="i-system" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Sistema</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="layout" id="top">
+  <aside class="sidenav" id="sidenav" aria-label="Contenido">
+    <div class="nav-head"><b>Contenido</b><button class="nav-close" id="nav-close" type="button" aria-label="Cerrar contenido">×</button></div>
+    <h4>Guía</h4>
+    <ul>
+      <li><a href="#usage">Uso</a></li>
+      <li><a href="#options">Opciones</a></li>
+      <li><a href="#lifecycle">Hooks del ciclo de vida</a></li>
+      <li><a href="#control">Control</a></li>
+      <li><a href="#behavior">Comportamiento</a></li>
+      <li><a href="#timeouts">Timeouts</a></li>
+      <li><a href="#wait-for-task">waitForTask</a></li>
+      <li><a href="#examples">Ejemplos</a></li>
+      <li><a href="#backoff">Backoff</a></li>
+    </ul>
+    <h4>Políticas con estado</h4>
+    <ul>
+      <li><a href="#policies">Resumen</a></li>
+      <li><a href="#circuit-breaker"><code>circuitBreaker</code></a></li>
+      <li><a href="#bulkhead"><code>bulkhead</code></a></li>
+      <li><a href="#throttle"><code>throttle</code></a></li>
+      <li><a href="#cache"><code>cache</code></a></li>
+      <li><a href="#dedupe"><code>dedupe</code></a></li>
+      <li><a href="#combining">Combinar políticas</a></li>
+    </ul>
+    <h4>Recetas</h4>
+    <ul>
+      <li><a href="#decorator">Crear un decorador</a></li>
+    </ul>
+  </aside>
+
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+  <main id="content" tabindex="-1">
+    <h1 class="sr-only">resilience: reintentos, timeouts y circuit breakers para TypeScript</h1>
+    <!-- USAGE -->
+    <section id="usage">
+      <h2>Uso<a class="anchor" href="#usage">#</a></h2>
+      <p class="section-lede">Ejecuta una función con reintentos, backoff, timeouts y cancelación mediante <code>AbortSignal</code>. Sin dependencias.</p>
+      <div class="install" style="margin-bottom:24px">
+        <span class="prompt">$</span>
+        <code id="install-cmd">npm install @jondotsoy/resilience</code>
+        <button class="copy" style="position:static" data-copy="#install-cmd">Copiar</button>
+      </div>
+      <p><code>resilience(options)</code> crea un ejecutor. Llama a <code>.attempt()</code> con la función que quieres proteger.</p>
+<div class="code"><pre data-hl><code>import { resilience } from "@jondotsoy/resilience";
+
+const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
+  fetch("https://api.example.com/data", { signal }),
+);</code></pre></div>
+      <h4 class="sub">Sintaxis</h4>
+<div class="code"><pre data-hl><code>resilience(options).attempt((control) => T | Promise&lt;T&gt;): Promise&lt;T&gt;</code></pre></div>
+    </section>
+
+    <!-- OPTIONS -->
+    <section id="options">
+      <h2>Opciones<a class="anchor" href="#options">#</a></h2>
+      <p class="section-lede">Todas las opciones son opcionales. Sin opciones, la función se ejecuta una vez. Los hooks del ciclo de vida están al final de la tabla.</p>
+      <div class="table-wrap"><table class="opts">
+        <colgroup><col style="width:16%"><col style="width:32%"><col style="width:12%"><col style="width:40%"></colgroup>
+        <thead><tr><th>Opción</th><th>Tipo</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>attempts</code></td><td class="type"><code>number</code></td><td class="def"><code>1</code></td><td>Número de intentos antes de rechazar. Debe ser un entero <code>&gt;= 1</code>.</td></tr>
+          <tr><td><code>signal</code></td><td class="type"><code>AbortSignal</code></td><td class="def">—</td><td>Cancela el intento en curso y los reintentos pendientes.</td></tr>
+          <tr><td><code>delay</code></td><td class="type"><code>number | (ctx: DelayContext) =&gt; number</code></td><td class="def"><code>0</code></td><td>Milisegundos de espera entre intentos. Pasa una función para calcularlo en cada intento. La espera se cancela si se aborta <code>signal</code>.</td></tr>
+          <tr><td><code>retryable</code></td><td class="type"><code>(error, ctx: RetryableContext) =&gt; boolean | Promise&lt;boolean&gt;</code></td><td class="def">reintenta todo</td><td>Si devuelve <code>false</code>, rechaza de inmediato con ese error sin reintentar. <code>ctx</code> trae <code>attempt</code> (el que falló) y <code>attempts</code>.</td></tr>
+          <tr><td><code>timeout</code></td><td class="type"><code>number</code></td><td class="def">—</td><td>Tiempo máximo en ms por intento. Al expirar, se aborta <code>control.signal</code> y el intento falla con un <code>DOMException</code> <code>"TimeoutError"</code>, que se puede reintentar.</td></tr>
+          <tr><td><code>fallback</code></td><td class="type"><code>(lastError, ctx: FallbackContext) =&gt; F | Promise&lt;F&gt;</code></td><td class="def">—</td><td>Se llama cuando la ejecución falla definitivamente. Lo que devuelve pasa a ser el resultado de <code>attempt</code> (el tipo queda <code>T | F</code>). Si lanza, <code>attempt</code> rechaza con ese error. No se llama cuando se aborta <code>signal</code>.</td></tr>
+          <tr><td><code>waitForTask</code></td><td class="type"><code>boolean</code></td><td class="def"><code>true</code></td><td>Qué hace <code>attempt</code> cuando se aborta <code>signal</code> o expira <code>timeout</code>. <code>true</code>: aborta <code>control.signal</code> y espera la tarea. <code>false</code>: rechaza de inmediato, aunque la tarea siga ejecutándose. Ver <a href="#wait-for-task">waitForTask</a>.</td></tr>
+          <tr class="group"><td colspan="4">Hooks del ciclo de vida <span>Todos son opcionales y se esperan si devuelven una promesa. Si uno lanza, <code>attempt</code> rechaza con ese error. Ver <a href="#lifecycle">Hooks del ciclo de vida</a>.</span></td></tr>
+          <tr><td><code>onStart</code></td><td class="type"><code>(context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Antes del primer intento. <code>attempt</code> es <code>0</code>.</td></tr>
+          <tr><td><code>onAttempt</code></td><td class="type"><code>(event: AttemptEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Antes de cada intento, incluido el primero. Trae <code>lastError</code>.</td></tr>
+          <tr><td><code>onTimeout</code></td><td class="type"><code>(event: TimeoutEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Cuando expira el <code>timeout</code> de un intento, antes de <code>onError</code>.</td></tr>
+          <tr><td><code>onError</code></td><td class="type"><code>(error, context: ErrorContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Cada vez que falla un intento. <code>context.willRetry</code> indica si viene otro.</td></tr>
+          <tr><td><code>onRetry</code></td><td class="type"><code>(event: RetryEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Antes de cada reintento, antes de la espera.</td></tr>
+          <tr><td><code>onSuccess</code></td><td class="type"><code>(value, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Cuando un intento tiene éxito.</td></tr>
+          <tr><td><code>onFailure</code></td><td class="type"><code>(error, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Cuando falla definitivamente, antes de <code>fallback</code>.</td></tr>
+          <tr><td><code>onAbort</code></td><td class="type"><code>(reason, context: LifecycleContext) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Cuando se aborta <code>signal</code>. No se ejecutan ni <code>onFailure</code> ni <code>fallback</code>.</td></tr>
+          <tr><td><code>onSettled</code></td><td class="type"><code>(event: SettledEvent) =&gt; void | Promise&lt;void&gt;</code></td><td class="def">—</td><td>Siempre, al final, con <code>status</code>: <code>"success"</code>, <code>"fallback"</code>, <code>"failure"</code> o <code>"aborted"</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p><code>RetryEvent</code> contiene <code>attempt</code> (el intento que está por ejecutarse: 2, 3, …), <code>attempts</code>, <code>error</code> (el error que causó el reintento) y <code>delay</code> (ms de espera antes de volver a ejecutar). <code>DelayContext</code> contiene <code>attempt</code>, <code>attempts</code> y <code>error</code>.</p>
+    </section>
+
+    <!-- LIFECYCLE -->
+    <section id="lifecycle">
+      <h2>Hooks del ciclo de vida<a class="anchor" href="#lifecycle">#</a></h2>
+      <p class="section-lede">Además de <code>onRetry</code>, las opciones aceptan hooks <code>on&lt;Event&gt;</code> que se ejecutan en este orden.</p>
+      <div class="lc" id="lc">
+        <div class="lc-bar">
+          <div class="seg-ctl" role="radiogroup" aria-label="Escenario">
+            <span class="seg-lbl">Escenario</span>
+            <button type="button" role="radio" data-lc="ok" aria-checked="false">al primer intento</button>
+            <button type="button" role="radio" data-lc="retry" aria-checked="true">reintento y éxito</button>
+            <button type="button" role="radio" data-lc="timeout" aria-checked="false">timeout y éxito</button>
+            <button type="button" role="radio" data-lc="fail" aria-checked="false">todos fallan</button>
+            <button type="button" role="radio" data-lc="fallback" aria-checked="false">todos fallan + fallback</button>
+            <button type="button" role="radio" data-lc="abort" aria-checked="false">abortado</button>
+          </div>
+          <button type="button" class="btn primary bx-replay" id="lc-play">▶ Reproducir</button>
+        </div>
+        <div class="lifecycle" role="img" aria-label="onStart, luego en cada intento onAttempt, onTimeout, onError, onRetry; luego onSuccess u onFailure u onAbort; luego onSettled">
+          <span class="hook" data-hook="onStart">onStart</span><span class="arrow">→</span>
+          <div class="loop" id="lc-loop">
+            <span class="hook" data-hook="onAttempt">onAttempt</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onTimeout">onTimeout?</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onError">onError?</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onRetry">onRetry?</span>
+          </div>
+          <span class="arrow">→</span>
+          <span class="hook" data-hook="onSuccess">onSuccess</span><span class="or">o</span><span class="hook" data-hook="onFailure">onFailure</span><span class="or">o</span><span class="hook" data-hook="onAbort">onAbort</span>
+          <span class="arrow">→</span><span class="hook" data-hook="onSettled">onSettled</span>
+        </div>
+        <ol class="lc-log" id="lc-log" aria-live="polite"></ol>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Hook</th><th>Argumentos</th><th>Cuándo</th></tr></thead>
+        <tbody>
+          <tr><td><code>onStart</code></td><td><code>{ attempt: 0, attempts }</code></td><td>Antes del primer intento.</td></tr>
+          <tr><td><code>onAttempt</code></td><td><code>{ attempt, attempts, lastError }</code></td><td>Antes de ejecutar cada intento, incluido el primero.</td></tr>
+          <tr><td><code>onTimeout</code></td><td><code>{ attempt, attempts, timeout }</code></td><td>Cuando expira el <code>timeout</code> de un intento (antes de <code>onError</code>).</td></tr>
+          <tr><td><code>onError</code></td><td><code>(error, { attempt, attempts, willRetry })</code></td><td>Cada vez que falla un intento. <code>willRetry</code> indica si viene otro.</td></tr>
+          <tr><td><code>onRetry</code></td><td><code>{ attempt, attempts, error, delay }</code></td><td>Antes de volver a ejecutar, antes de la espera.</td></tr>
+          <tr><td><code>onSuccess</code></td><td><code>(value, { attempt, attempts })</code></td><td>Cuando un intento tiene éxito.</td></tr>
+          <tr><td><code>onFailure</code></td><td><code>(error, { attempt, attempts })</code></td><td>Cuando falla definitivamente, antes de <code>fallback</code>.</td></tr>
+          <tr><td><code>onAbort</code></td><td><code>(reason, { attempt, attempts })</code></td><td>Cuando se aborta <code>signal</code>. No se llama ni a <code>onFailure</code> ni a <code>fallback</code>.</td></tr>
+          <tr><td><code>onSettled</code></td><td><code>{ status, attempt, attempts, value?, error? }</code></td><td>Siempre, al final. <code>status</code> es <code>"success"</code>, <code>"fallback"</code>, <code>"failure"</code> o <code>"aborted"</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Cada hook se espera si devuelve una promesa. Si un hook lanza, <code>attempt</code> rechaza con ese error.</p>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 3,
+  timeout: 2_000,
+  onAttempt: ({ attempt, attempts }) => console.log(`intento ${attempt}/${attempts}`),
+  onError: (error, { willRetry }) => console.warn("falló", error, { willRetry }),
+  onSettled: ({ status, attempt }) => metrics.record("fetch_user", { status, attempt }),
+}).attempt(({ signal }) => getUser(id, signal));</code></pre></div>
+    </section>
+
+    <!-- CONTROL -->
+    <section id="control">
+      <h2>Control<a class="anchor" href="#control">#</a></h2>
+      <p class="section-lede">La función recibe un objeto <code>control</code> en cada intento.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Campo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>signal</code></td><td>El <code>AbortSignal</code> del intento. Pásalo a <code>fetch</code> o a cualquier API cancelable. Se aborta cuando se aborta <code>options.signal</code> o cuando expira <code>options.timeout</code>.</td></tr>
+          <tr><td><code>attempt</code></td><td>Número del intento actual, desde 1.</td></tr>
+          <tr><td><code>attempts</code></td><td>Total de intentos permitidos.</td></tr>
+          <tr><td><code>lastError</code></td><td>Error del intento anterior, o <code>undefined</code> en el primero.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- BEHAVIOR -->
+    <section id="behavior">
+      <h2>Comportamiento<a class="anchor" href="#behavior">#</a></h2>
+      <ul class="list">
+        <li>Si la función resuelve, <code>attempt</code> devuelve ese valor y no se ejecutan más intentos.</li>
+        <li>Si <code>retryable</code> devuelve <code>false</code>, rechaza con ese error sin más intentos.</li>
+        <li>Si hay un <code>fallback</code>, cualquier fallo definitivo (intentos agotados o <code>retryable</code> que devuelve <code>false</code>) resuelve con lo que devuelva el fallback.</li>
+        <li>Si todos los intentos fallan y no hay <code>fallback</code>, <code>attempt</code> rechaza con el error del último intento.</li>
+        <li>Entre un intento fallido y el siguiente se llama a <code>onRetry</code> y luego se esperan <code>delay</code> ms.</li>
+        <li>Si se aborta <code>options.signal</code> durante un intento, se aborta <code>control.signal</code> y <code>attempt</code> espera la tarea y devuelve su resultado o su error, sin reintentar. Si se aborta durante la espera entre intentos, rechaza de inmediato con <code>signal.reason</code>. Con <code>waitForTask: false</code>, siempre rechaza de inmediato con <code>signal.reason</code>.</li>
+      </ul>
+    </section>
+
+    <!-- TIMEOUTS -->
+    <section id="timeouts">
+      <h2>Timeout por intento vs. total<a class="anchor" href="#timeouts">#</a></h2>
+      <p class="section-lede">Hay dos formas de poner un límite de tiempo, y se pueden combinar.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th><code>timeout: ms</code></th><th><code>signal: AbortSignal.timeout(ms)</code></th></tr></thead>
+        <tbody>
+          <tr><td>Qué limita</td><td>Cada intento por separado</td><td>Toda la ejecución, incluidos reintentos y esperas</td></tr>
+          <tr><td>Al expirar</td><td>Aborta <code>control.signal</code> con <code>TimeoutError</code></td><td>Aborta <code>control.signal</code> con el <code>reason</code> de la señal</td></tr>
+          <tr><td>¿Se reintenta?</td><td>Sí, cuenta como un fallo más</td><td>No, <code>attempt</code> rechaza de inmediato</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 3,
+  timeout: 2_000,                      // cada intento dura como máximo 2 s
+  signal: AbortSignal.timeout(10_000), // y todo junto, como máximo 10 s
+  delay: 500,
+}).attempt(({ signal }) => fetch(url, { signal }));</code></pre></div>
+      <p>En ambos casos <code>control.signal</code> recibe el evento <code>abort</code>, así que basta con pasarlo a <code>fetch</code> o a la API que uses.</p>
+    </section>
+
+    <!-- WAIT FOR TASK -->
+    <section id="wait-for-task">
+      <h2>¿Esperar la tarea o no?<a class="anchor" href="#wait-for-task">#</a></h2>
+      <p class="section-lede">Abortar solo <strong>avisa</strong> a la tarea. Si la tarea ignora <code>control.signal</code>, puede seguir ejecutándose. <code>waitForTask</code> decide qué hace el <code>await</code> sobre <code>.attempt()</code>.</p>
+<div class="code"><pre data-hl><code>// waitForTask: false: rechaza apenas expira el timeout o se aborta la señal.
+await resilience({ timeout: 1_000, waitForTask: false }).attempt(task);
+// → TimeoutError al segundo, aunque `task` siga ejecutándose.
+
+// Por defecto (waitForTask: true): aborta control.signal pero espera a que la tarea termine.
+const result = await resilience({ timeout: 1_000 }).attempt(
+  async ({ signal }) => {
+    const items: string[] = [];
+    let stop = false;
+
+    signal.addEventListener("abort", () => {
+      // signal.reason es un TimeoutError: termina el ítem actual y para.
+      console.warn("Se acabó el tiempo, guardando los ítems procesados", signal.reason);
+      stop = true;
+    });
+
+    for (const item of queue) {
+      if (stop) break;
+      items.push(await process(item));
+    }
+
+    await save(items);
+    return { items, complete: !stop };
+  },
+);</code></pre></div>
+      <h3>Qué pasa en cada combinación</h3>
+      <div class="bx" id="bx">
+        <div class="bx-controls">
+          <div class="seg-ctl" role="radiogroup" aria-label="Límite de tiempo">
+            <span class="seg-lbl">Límite</span>
+            <button type="button" role="radio" data-k="limit" data-v="timeout" aria-checked="true"><code>timeout</code></button>
+            <button type="button" role="radio" data-k="limit" data-v="signal" aria-checked="false"><code>signal</code></button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="waitForTask">
+            <span class="seg-lbl">waitForTask</span>
+            <button type="button" role="radio" data-k="wait" data-v="true" aria-checked="true"><code>true</code></button>
+            <button type="button" role="radio" data-k="wait" data-v="false" aria-checked="false"><code>false</code></button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Resultado de la tarea tras el abort">
+            <span class="seg-lbl">Luego la tarea</span>
+            <button type="button" role="radio" data-k="task" data-v="ok" aria-checked="true">tiene éxito</button>
+            <button type="button" role="radio" data-k="task" data-v="fail" aria-checked="false">lanza</button>
+          </div>
+          <div class="bx-replay"><button type="button" class="btn" id="bx-replay">▶ Repetir</button></div>
+        </div>
+        <div class="bx-stage">
+          <div class="bx-lane"><span class="bx-name">tarea</span><div class="bx-track" id="bx-task"></div></div>
+          <div class="bx-lane"><span class="bx-name"><code>attempt()</code></span><div class="bx-track" id="bx-att"></div></div>
+          <div class="bx-lane"><span class="bx-name">siguiente</span><div class="bx-track" id="bx-next"></div></div>
+        </div>
+        <div class="bx-result">
+          <div class="bx-verdict" id="bx-verdict"></div>
+          <div class="bx-chips" id="bx-chips"></div>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Configuración</th><th>Al expirar / abortar</th><th>La tarea luego tiene éxito</th><th>La tarea luego lanza</th><th>¿Reintenta?</th><th>¿<code>fallback</code>?</th></tr></thead>
+        <tbody>
+          <tr><td><code>timeout</code></td><td>Aborta <code>control.signal</code> y espera</td><td>Devuelve ese valor</td><td>Cuenta como intento fallido</td><td>Sí</td><td>Si se acaban los intentos</td></tr>
+          <tr><td><code>timeout</code> + <code>waitForTask: false</code></td><td>Rechaza con <code>TimeoutError</code></td><td>Se ignora</td><td>Se ignora</td><td>Sí</td><td>Si se acaban los intentos</td></tr>
+          <tr><td><code>signal</code></td><td>Aborta <code>control.signal</code> y espera</td><td>Devuelve ese valor</td><td>Rechaza con el error de la tarea</td><td>No</td><td>No</td></tr>
+          <tr><td><code>signal</code> + <code>waitForTask: false</code></td><td>Rechaza con <code>signal.reason</code></td><td>Se ignora</td><td>Se ignora</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><p>Con el valor por defecto, una tarea que ignora <code>control.signal</code> y nunca termina deja a <code>attempt</code> esperando para siempre, aunque expire <code>timeout</code>. Si la tarea no escucha el abort, usa <code>waitForTask: false</code>.</p></div>
+
+      <h3>Un plazo total con <code>AbortSignal.timeout</code></h3>
+<div class="code"><pre data-hl><code>const result = await resilience({
+  attempts: 3,
+  delay: 1_000,
+  signal: AbortSignal.timeout(10_000),
+}).attempt(async ({ signal }) => {
+  signal.addEventListener("abort", () => {
+    // A los 10 s: signal.reason es un TimeoutError.
+  });
+  return await longTask(signal);
+});</code></pre></div>
+      <p>A los 10 s, contados desde que se creó la señal (no desde cada intento):</p>
+      <ul class="list">
+        <li><strong>Si hay un intento en curso</strong>, se aborta su <code>control.signal</code> y <code>attempt</code> espera la tarea. Si la tarea devuelve un valor, <code>attempt</code> resuelve con él (<code>status: "success"</code>). Si lanza, <code>attempt</code> rechaza con ese error, sin reintento y sin <code>fallback</code> (<code>status: "aborted"</code>).</li>
+        <li><strong>Si está esperando entre intentos</strong>, no hay tarea que esperar: <code>attempt</code> rechaza de inmediato con el <code>TimeoutError</code>.</li>
+        <li><strong>Si la señal ya estaba abortada</strong> antes de llamar a <code>attempt</code>, rechaza sin ejecutar la tarea.</li>
+      </ul>
+      <p><code>waitForTask</code> solo cambia si se espera la tarea en curso. Una señal abortada nunca deja empezar un nuevo intento.</p>
+    </section>
+
+    <!-- EXAMPLES -->
+    <section id="examples">
+      <h2>Ejemplos<a class="anchor" href="#examples">#</a></h2>
+      <h3>Informar los reintentos</h3>
+<div class="code"><pre data-hl><code>await resilience({
+  attempts: 5,
+  onRetry: ({ attempt, attempts, error }) => {
+    console.warn(`Reintento ${attempt}/${attempts}`, error);
+  },
+}).attempt(({ signal }) => fetch(url, { signal }));</code></pre></div>
+      <h3>Esperar 500 ms entre intentos</h3>
+<div class="code"><pre data-hl><code>await resilience({ attempts: 3, delay: 500 }).attempt(task);</code></pre></div>
+      <h3>Valor de respaldo cuando todo falla</h3>
+<div class="code"><pre data-hl><code>const user = await resilience({
+  attempts: 3,
+  fallback: async (lastError) => {
+    console.error("No se pudo obtener el usuario", lastError);
+    return null;
+  },
+}).attempt(({ signal }) => getUser(id, signal)); // User | null</code></pre></div>
+      <h3>Reintentar solo errores del servidor</h3>
+<div class="code"><pre data-hl><code>class HttpError extends Error {
+  constructor(public status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+await resilience({
+  attempts: 3,
+  timeout: 2_000,
+  retryable: (error) => !(error instanceof HttpError) || error.status >= 500,
+}).attempt(async ({ signal }) => {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new HttpError(res.status);
+  return res.json();
+});</code></pre></div>
+    </section>
+
+    <!-- BACKOFF -->
+    <section id="backoff">
+      <h2>Backoff<a class="anchor" href="#backoff">#</a></h2>
+      <p class="section-lede">Helpers listos para la opción <code>delay</code>. Todos aceptan <code>{ maxDelay, jitter }</code>, donde <code>jitter</code> es <code>"full"</code> (entre 0 y el delay) o <code>"equal"</code> (entre la mitad del delay y el delay).</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Helper</th><th>Serie con <code>ms = 100</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>fixedBackoff(ms)</code></td><td><code>100, 100, 100, …</code></td></tr>
+          <tr><td><code>linearBackoff(ms)</code></td><td><code>100, 200, 300, …</code></td></tr>
+          <tr><td><code>exponentialBackoff(ms, { factor })</code></td><td><code>100, 200, 400, …</code> (factor 2)</td></tr>
+          <tr><td><code>fibonacciBackoff(ms)</code></td><td><code>100, 100, 200, 300, 500, …</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>Prueba los helpers aquí abajo. Cada barra es la espera antes de un reintento. Con <code>jitter</code>, el contorno punteado es el delay calculado y la barra sólida es un sorteo al azar.</p>
+      <div class="bo" id="bo">
+        <div class="bx-controls">
+          <div class="seg-ctl" role="radiogroup" aria-label="Helper">
+            <span class="seg-lbl">Helper</span>
+            <button type="button" role="radio" data-bo="fn" data-v="fixed" aria-checked="false">fixed</button>
+            <button type="button" role="radio" data-bo="fn" data-v="linear" aria-checked="false">linear</button>
+            <button type="button" role="radio" data-bo="fn" data-v="exponential" aria-checked="true">exponential</button>
+            <button type="button" role="radio" data-bo="fn" data-v="fibonacci" aria-checked="false">fibonacci</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Delay base">
+            <span class="seg-lbl">ms</span>
+            <button type="button" role="radio" data-bo="ms" data-v="100" aria-checked="false">100</button>
+            <button type="button" role="radio" data-bo="ms" data-v="200" aria-checked="true">200</button>
+            <button type="button" role="radio" data-bo="ms" data-v="500" aria-checked="false">500</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="maxDelay">
+            <span class="seg-lbl">maxDelay</span>
+            <button type="button" role="radio" data-bo="max" data-v="0" aria-checked="true">ninguno</button>
+            <button type="button" role="radio" data-bo="max" data-v="2000" aria-checked="false">2 s</button>
+            <button type="button" role="radio" data-bo="max" data-v="5000" aria-checked="false">5 s</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="jitter">
+            <span class="seg-lbl">jitter</span>
+            <button type="button" role="radio" data-bo="jit" data-v="" aria-checked="true">ninguno</button>
+            <button type="button" role="radio" data-bo="jit" data-v="full" aria-checked="false"><code>"full"</code></button>
+            <button type="button" role="radio" data-bo="jit" data-v="equal" aria-checked="false"><code>"equal"</code></button>
+          </div>
+          <div class="sim-group"><span class="seg-lbl">attempts</span><div class="stepper"><button type="button" data-bo-att="-1" aria-label="Menos intentos">−</button><output id="bo-att">6</output><button type="button" data-bo-att="1" aria-label="Más intentos">+</button></div></div>
+        </div>
+        <div class="bo-chart" id="bo-chart" role="img" aria-label="Espera antes de cada reintento"></div>
+        <div class="bo-x" id="bo-x"></div>
+        <pre class="tc-code" id="bo-code"></pre>
+        <div class="bo-run">
+          <div class="bo-run-head"><span>Todos los intentos fallan salvo el último · cada intento dura <b>300 ms</b></span><span><button type="button" class="replay" id="bo-roll" hidden>↻ nuevo sorteo</button> <button type="button" class="replay" id="bo-play">▶ ejecutar</button></span></div>
+          <div class="track" id="bo-track"><div class="lane" id="bo-lane"></div></div>
+          <div class="axis"><span>0 ms</span><span id="bo-total"></span></div>
+          <p class="bo-cap" id="bo-cap"></p>
+        </div>
+      </div>
+<div class="code"><pre data-hl><code>import { resilience, exponentialBackoff } from "@jondotsoy/resilience";
+
+await resilience({
+  attempts: 5,
+  delay: exponentialBackoff(200, { maxDelay: 5_000, jitter: "full" }),
+  onRetry: ({ attempt, delay }) => console.warn(`Reintento ${attempt} en ${delay} ms`),
+}).attempt(task);</code></pre></div>
+      <p>También puedes pasar tu propia función: <code>delay: ({ attempt, error }) =&gt; …</code>.</p>
+      <p>Todas las utilidades (backoffs, políticas y errores) también cuelgan de la función <code>resilience</code>, así que basta con un solo import:</p>
+<div class="code"><pre data-hl><code>import { resilience } from "@jondotsoy/resilience";
+
+await resilience({
+  attempts: 5,
+  delay: resilience.exponentialBackoff(200, { maxDelay: 5_000 }),
+}).attempt(task);
+
+const breaker = resilience.circuitBreaker({ failureThreshold: 3 });</code></pre></div>
+    </section>
+
+    <!-- POLICIES -->
+    <section id="policies">
+      <h2>Políticas con estado<a class="anchor" href="#policies">#</a></h2>
+      <p class="section-lede">Las políticas guardan estado entre llamadas. Crea cada una <strong>una sola vez</strong>, por ejemplo una por servicio, y compártela. Todas exponen <code>execute(fn)</code> y se anidan entre sí y con <code>resilience</code>.</p>
+      <div class="policy-grid">
+        <a href="#circuit-breaker"><b>circuitBreaker</b><span>Deja de llamar a un servicio tras fallos repetidos y luego lo prueba.</span></a>
+        <a href="#bulkhead"><b>bulkhead</b><span>Limita cuántas llamadas corren a la vez, con una cola opcional.</span></a>
+        <a href="#throttle"><b>throttle</b><span>Como máximo <code>limit</code> llamadas en una ventana deslizante.</span></a>
+        <a href="#cache"><b>cache</b><span>Guarda un resultado en memoria durante <code>ttl</code> ms por clave.</span></a>
+        <a href="#dedupe"><b>dedupe</b><span>Une llamadas simultáneas con la misma clave.</span></a>
+      </div>
+
+      <h3 id="circuit-breaker"><code>circuitBreaker</code><a class="anchor" href="#circuit-breaker">#</a></h3>
+      <p>Tras <code>failureThreshold</code> fallos consecutivos se <strong>abre</strong> y rechaza al instante con <code>CircuitOpenError</code>. Pasados <code>resetTimeout</code> ms pasa a <strong>semiabierto</strong> y deja pasar una prueba: si tiene éxito se <strong>cierra</strong>, si falla se vuelve a abrir.</p>
+      <p>Dos consumidores, <strong>A</strong> y <strong>B</strong>, comparten un breaker. El playground arranca con un ejemplo (<code>failureThreshold: 3</code>, <code>resetTimeout</code> de 4 pasos). Cada botón es una llamada a <code>breaker.execute()</code> en la que el servicio responde con éxito o con fallo; <strong>Esperar</strong> deja pasar un paso sin llamadas. Cambia las opciones para ver cómo reacciona el circuito.</p>
+<div class="sim" id="cb-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">failureThreshold</span><div class="stepper"><button type="button" data-cb="thr" data-d="-1" aria-label="Bajar failureThreshold">−</button><output id="cb-thr">3</output><button type="button" data-cb="thr" data-d="1" aria-label="Subir failureThreshold">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">resetTimeout (pasos)</span><div class="stepper"><button type="button" data-cb="reset" data-d="-1" aria-label="Bajar resetTimeout (pasos)">−</button><output id="cb-reset">4</output><button type="button" data-cb="reset" data-d="1" aria-label="Subir resetTimeout (pasos)">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">successThreshold</span><div class="stepper"><button type="button" data-cb="succ" data-d="-1" aria-label="Bajar successThreshold">−</button><output id="cb-succ">1</output><button type="button" data-cb="succ" data-d="1" aria-label="Subir successThreshold">+</button></div></div>
+          <div class="sim-group sim-right">
+            <button type="button" class="btn" id="cb-example">Repetir ejemplo</button>
+            <button type="button" class="btn" id="cb-clear">Limpiar</button>
+          </div>
+        </div>
+        <div class="sim-live cb-live">
+          <div class="sim-pool"><span class="seg-lbl">Estado</span><div class="cb-state" id="cb-state"></div></div>
+          <div class="sim-pool"><span class="seg-lbl" id="cb-meter-lbl">Fallos consecutivos</span><div class="boxes cb-dots" id="cb-meter"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Llama a execute(): el servicio responde</span>
+            <div class="calls">
+              <button type="button" class="call-btn" data-who="A" data-res="o">A <i class="mk ok sm"></i></button>
+              <button type="button" class="call-btn" data-who="A" data-res="x">A <i class="mk fail sm"></i></button>
+              <button type="button" class="call-btn" data-who="B" data-res="o">B <i class="mk ok sm"></i></button>
+              <button type="button" class="call-btn" data-who="B" data-res="x">B <i class="mk fail sm"></i></button>
+              <button type="button" class="btn" id="cb-wait">Esperar</button>
+            </div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="cb-grid"></div></div>
+        <p class="sim-msg" id="cb-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>llamada exitosa</span><span><i class="mk fail"></i>llamada fallida</span><span><i class="mk rej"></i>rechazada con CircuitOpenError</span><span><i class="mk probe"></i>llamada de prueba en semiabierto</span></figcaption>
+      </div>
+      <ul class="list">
+        <li><strong>El contador es compartido.</strong> Los fallos de A y B se suman. El tercer fallo consecutivo abre el circuito para ambos.</li>
+        <li><strong>Un éxito de cualquiera reinicia el contador.</strong> El éxito de B entre los fallos de A lo devuelve a 0.</li>
+        <li>Mientras está <strong>abierto</strong>, ninguno llama al servicio durante <code>resetTimeout</code>.</li>
+        <li>Después, <strong>solo una llamada</strong> hace la prueba. La prueba de B falla y el circuito se vuelve a abrir; la prueba posterior de A tiene éxito y el circuito se cierra para ambos.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Opción</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>failureThreshold</code></td><td class="def"><code>5</code></td><td>Fallos consecutivos que abren el circuito.</td></tr>
+          <tr><td><code>resetTimeout</code></td><td class="def"><code>30_000</code></td><td>Ms abierto antes de volver a probar.</td></tr>
+          <tr><td><code>successThreshold</code></td><td class="def"><code>1</code></td><td>Éxitos en semiabierto necesarios para cerrarlo.</td></tr>
+          <tr><td><code>isFailure</code></td><td class="def">todos</td><td><code>(error) =&gt; boolean</code>, qué errores cuentan como fallos.</td></tr>
+          <tr><td><code>onStateChange</code></td><td class="def">—</td><td><code>(state, previous) =&gt; void</code>.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const breaker = circuitBreaker({ failureThreshold: 5, resetTimeout: 10_000 });
+
+await breaker.execute(() => fetch(url));
+breaker.state; // "closed" | "open" | "half-open"
+breaker.reset();</code></pre></div>
+
+      <h3 id="bulkhead"><code>bulkhead</code><a class="anchor" href="#bulkhead">#</a></h3>
+<div class="code"><pre data-hl><code>bulkhead(options) → { execute(fn, { signal }), running, queued }</code></pre></div>
+      <p>Limita cuántas llamadas corren a la vez. Si hay un cupo libre, la llamada empieza. Si no, espera en una cola de tamaño <code>maxQueue</code> y sale en orden de llegada. Con todos los cupos y la cola llenos, rechaza al instante con <code>BulkheadRejectedError</code>.</p>
+      <p>Tres consumidores comparten un bulkhead. Cada llamada dura 2 pasos. El playground arranca con el ejemplo de abajo (<code>maxConcurrent: 1</code>, <code>maxQueue: 1</code>). Elige quién llama, pulsa <strong>Siguiente paso</strong> y cambia los límites para ver cómo se comportan los cupos y la cola.</p>
+<div class="sim" id="bh-sim">
+        <div class="sim-bar">
+          <div class="sim-group">
+            <span class="seg-lbl">maxConcurrent</span>
+            <div class="stepper"><button type="button" data-cfg="slots" data-d="-1" aria-label="Menos cupos">−</button><output id="bh-slots">1</output><button type="button" data-cfg="slots" data-d="1" aria-label="Más cupos">+</button></div>
+          </div>
+          <div class="sim-group">
+            <span class="seg-lbl">maxQueue</span>
+            <div class="stepper"><button type="button" data-cfg="queue" data-d="-1" aria-label="Cola más chica">−</button><output id="bh-queue">1</output><button type="button" data-cfg="queue" data-d="1" aria-label="Cola más grande">+</button></div>
+          </div>
+          <div class="sim-group sim-right">
+            <button type="button" class="btn" id="bh-example">Repetir ejemplo</button>
+            <button type="button" class="btn" id="bh-reset">Limpiar</button>
+          </div>
+        </div>
+        <div class="sim-live">
+          <div class="sim-pool"><span class="seg-lbl">En curso</span><div class="boxes" id="bh-run"></div></div>
+          <div class="sim-pool"><span class="seg-lbl">Cola</span><div class="boxes" id="bh-q"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Llama a execute() en el siguiente paso</span>
+            <div class="calls">
+              <button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button>
+              <button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button>
+              <button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button>
+              <button type="button" class="btn primary" id="bh-step">Siguiente paso →</button>
+            </div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="bh-grid"></div></div>
+        <p class="sim-msg" id="bh-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>empieza</span><span><i class="run run-key"></i>en curso</span><span><i class="mk queue"></i>espera en la cola</span><span><i class="mk rej"></i>rechazada con BulkheadRejectedError</span></figcaption>
+      </div>
+      <ul class="list">
+        <li><strong>Los cupos son compartidos.</strong> Entre A, B y C solo corre una llamada a la vez.</li>
+        <li>B llega mientras A corre y espera en la cola. C llega en el mismo paso, con el cupo y la cola llenos, y es rechazado.</li>
+        <li>Cuando A termina, B sale de la cola y empieza sin volver a llamar a <code>execute</code>. El cupo se libera aunque la llamada falle.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Opción</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>maxConcurrent</code></td><td class="def">—</td><td>Llamadas en paralelo.</td></tr>
+          <tr><td><code>maxQueue</code></td><td class="def"><code>0</code></td><td>Llamadas esperando su turno.</td></tr>
+          <tr><td><code>signal</code></td><td class="def">—</td><td>En <code>execute</code>: cancela la espera en la cola.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const db = resilience.bulkhead({
+  maxConcurrent: 2,
+  maxQueue: 1,
+});
+
+export const query = (sql: string, signal?: AbortSignal) =>
+  db.execute(() => client.query(sql), { signal });
+
+db.running; // en curso
+db.queued;  // esperando</code></pre></div>
+
+      <h3 id="throttle"><code>throttle</code><a class="anchor" href="#throttle">#</a></h3>
+<div class="code"><pre data-hl><code>throttle(options) → { execute(fn), remaining }</code></pre></div>
+      <p>Como máximo <code>limit</code> llamadas en cualquier lapso de <code>interval</code> ms. Si se excede, rechaza con <code>ThrottleError</code>, cuyo <code>retryAfter</code> dice cuántos ms faltan para que se libere un cupo. Las llamadas rechazadas no gastan cupos.</p>
+      <p>Tres consumidores comparten un throttle. El playground arranca con un ejemplo (<code>limit: 3</code>, <code>interval</code> de 5 pasos). Elige quién llama, pulsa <strong>Siguiente paso</strong> y cambia los límites para ver cómo se llena y se libera la ventana deslizante.</p>
+<div class="sim" id="th-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">limit</span><div class="stepper"><button type="button" data-th="th-limit" data-d="-1" aria-label="Bajar limit">−</button><output id="th-limit">3</output><button type="button" data-th="th-limit" data-d="1" aria-label="Subir limit">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">interval (pasos)</span><div class="stepper"><button type="button" data-th="th-win" data-d="-1" aria-label="Bajar interval (pasos)">−</button><output id="th-win">5</output><button type="button" data-th="th-win" data-d="1" aria-label="Subir interval (pasos)">+</button></div></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="th-example">Repetir ejemplo</button><button type="button" class="btn" id="th-clear">Limpiar</button></div>
+        </div>
+        <div class="sim-live">
+          <div class="sim-pool"><span class="seg-lbl" id="th-win-lbl">Ventana</span><div class="boxes" id="th-slots"></div></div>
+          <div class="sim-pool"><span class="seg-lbl">remaining</span><div class="cb-state" id="th-left"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Llama a execute() en el siguiente paso</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="th-step">Siguiente paso →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll" style="padding-top:26px"><div class="tl-grid" id="th-grid"></div></div>
+        <p class="sim-msg" id="th-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>permitida</span><span><i class="mk rej"></i>rechazada con ThrottleError</span><span><i class="tl-window" style="position:static;display:inline-block;width:22px;height:14px"></i>ventana deslizante</span></figcaption>
+      </div>
+      <ul class="list">
+        <li><strong>El límite es compartido.</strong> A, B y C usan los 3 cupos en el primer paso, así que los siguientes intentos de A y B no llaman al servicio.</li>
+        <li>Cada <code>ThrottleError</code> trae <code>retryAfter</code>: el tiempo que falta para que la llamada más antigua salga de la ventana.</li>
+        <li>La ventana es <strong>deslizante</strong>: en cada paso cuentan las llamadas de los últimos 5 pasos.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Opción</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>limit</code></td><td class="def">—</td><td>Llamadas permitidas por ventana.</td></tr>
+          <tr><td><code>interval</code></td><td class="def">—</td><td>Tamaño de la ventana en ms.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const api = resilience.throttle({
+  limit: 3,
+  interval: 1_000, // 3 por segundo
+});
+
+try {
+  await api.execute(() => fetch(url));
+} catch (error) {
+  if (error instanceof resilience.ThrottleError) {
+    console.log("reintenta en", error.retryAfter, "ms");
+  }
+}</code></pre></div>
+
+      <h3 id="cache"><code>cache</code><a class="anchor" href="#cache">#</a></h3>
+<div class="code"><pre data-hl><code>cache(options) → { execute(key, fn), delete(key), clear(), size }</code></pre></div>
+      <p>Guarda en memoria el resultado de <code>fn</code> para una <code>key</code> durante <code>ttl</code> ms, contados desde que llega el valor. Una petición que llega mientras la primera llamada sigue en curso comparte esa ejecución. Los errores no se guardan.</p>
+      <p>Tres consumidores piden la misma clave. El servicio tarda 2 pasos en responder. El playground arranca con un ejemplo (<code>ttl</code> de 5 pasos). Elige quién llama, si la próxima llamada al servicio tiene éxito o falla, y pulsa <strong>Siguiente paso</strong>. <strong>delete(key)</strong> invalida la entrada.</p>
+<div class="sim" id="ca-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">ttl (pasos)</span><div class="stepper"><button type="button" data-ca="ca-ttl" data-d="-1" aria-label="Bajar ttl (pasos)">−</button><output id="ca-ttl">5</output><button type="button" data-ca="ca-ttl" data-d="1" aria-label="Subir ttl (pasos)">+</button></div></div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Próxima llamada al servicio"><span class="seg-lbl">Próxima llamada al servicio</span><button type="button" role="radio" data-ca-fail="0" aria-checked="true">tiene éxito</button><button type="button" role="radio" data-ca-fail="1" aria-checked="false">falla</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="ca-example">Repetir ejemplo</button><button type="button" class="btn" id="ca-clear">Limpiar</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Entrada de la clave</span><div class="cb-state" id="ca-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Llama a execute("config") en el siguiente paso</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="ca-step">Siguiente paso →</button><button type="button" class="btn" id="ca-del">delete(key)</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="ca-grid"></div></div>
+        <p class="sim-msg" id="ca-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>no está en caché, llama al servicio</span><span><i class="run run-key"></i>esperando la respuesta</span><span><i class="mk hit"></i>está en caché</span><span><i class="mk share"></i>comparte la llamada en curso</span><span><i class="mk fail"></i>llamada fallida, no se guarda</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>llamada compartida que falló</span></figcaption>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Opción</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>ttl</code></td><td class="def">—</td><td>Vida de cada entrada en ms.</td></tr>
+          <tr><td><code>maxSize</code></td><td class="def">sin límite</td><td>Máximo de entradas. Al excederlo, se descarta la más antigua.</td></tr>
+        </tbody>
+      </table></div>
+<div class="code"><pre data-hl><code>const users = resilience.cache({
+  ttl: 60_000,
+  maxSize: 500,
+});
+
+export const getUser = (id: string) =>
+  users.execute(`user:${id}`, () => fetchUser(id));
+
+users.delete("user:42"); // invalida una entrada</code></pre></div>
+
+      <h3 id="dedupe"><code>dedupe</code><a class="anchor" href="#dedupe">#</a></h3>
+<div class="code"><pre data-hl><code>dedupe() → { execute(key, fn), pending }</code></pre></div>
+      <p>Si ya hay una llamada en curso con la misma <code>key</code>, devuelve esa misma promesa en vez de ejecutar <code>fn</code> otra vez. No guarda resultados: apenas termina la llamada, la clave se libera. Útil cuando varios componentes piden lo mismo a la vez, como la configuración al arrancar.</p>
+      <p>Tres consumidores piden la misma clave y el servicio tarda 2 pasos en responder. Elige quién llama y pulsa <strong>Siguiente paso</strong>: quien llega mientras hay una llamada en curso recibe la misma promesa, y la clave queda libre apenas se resuelve.</p>
+<div class="sim" id="dd-sim">
+        <div class="sim-bar">
+          
+          <div class="seg-ctl" role="radiogroup" aria-label="Próxima llamada al servicio"><span class="seg-lbl">Próxima llamada al servicio</span><button type="button" role="radio" data-dd-fail="0" aria-checked="true">tiene éxito</button><button type="button" role="radio" data-dd-fail="1" aria-checked="false">falla</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="dd-example">Repetir ejemplo</button><button type="button" class="btn" id="dd-clear">Limpiar</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Clave</span><div class="cb-state" id="dd-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Llama a execute("config") en el siguiente paso</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="dd-step">Siguiente paso →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="dd-grid"></div></div>
+        <p class="sim-msg" id="dd-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>llama al servicio</span><span><i class="run run-key"></i>esperando la respuesta</span><span><i class="mk share"></i>recibe la misma promesa</span><span><i class="mk fail"></i>llamada fallida</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>llamada compartida que falló</span></figcaption>
+      </div>
+      <p>A diferencia de <code>cache</code>, <code>dedupe</code> solo une peticiones <strong>simultáneas</strong>. Para reutilizar el valor después de que llega, usa <code>cache</code>.</p>
+<div class="code"><pre data-hl><code>const inFlight = resilience.dedupe();
+
+// A, B y C llaman casi a la vez: una sola petición
+const [a, b, c] = await Promise.all([
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig),
+  inFlight.execute("config", loadConfig),
+]);</code></pre></div>
+
+      <h3 id="combining">Combinar políticas<a class="anchor" href="#combining">#</a></h3>
+      <p>El orden de anidación define el comportamiento. Un breaker por fuera hace que toda la secuencia de reintentos cuente como una sola llamada:</p>
+<div class="code"><pre data-hl><code>const breaker = circuitBreaker({ failureThreshold: 3 });
+const pool = bulkhead({ maxConcurrent: 10 });
+
+const getData = () =>
+  breaker.execute(() =>
+    resilience({
+      attempts: 3,
+      timeout: 2_000,
+      delay: exponentialBackoff(200),
+    }).attempt(({ signal }) => pool.execute(() => fetch(url, { signal }), { signal })),
+  );
+
+// Con un fallback por fuera, incluso un CircuitOpenError termina en el valor de respaldo:
+const getDataSafe = () =>
+  resilience({ fallback: () => cachedData }).attempt(getData);</code></pre></div>
+    </section>
+
+    <!-- DECORATOR -->
+    <section id="decorator">
+      <h2>Crear un decorador<a class="anchor" href="#decorator">#</a></h2>
+      <p class="section-lede"><code>resilience</code> no trae un decorador, pero puedes crear uno en pocas líneas con los decoradores estándar de TypeScript 5 (sin <code>experimentalDecorators</code>), que Bun también soporta.</p>
+      <h3>1. El decorador</h3>
+      <p>Crea el ejecutor una vez y reemplaza el método por uno que corre dentro de <code>attempt</code>. El <code>control</code> del intento se agrega como último argumento.</p>
+<div class="code"><pre data-hl><code>import { resilience, type Control, type ResilienceOptions } from "@jondotsoy/resilience";
+
+export function resilient&lt;This&gt;(
+  options: ResilienceOptions | ((self: This) => ResilienceOptions) = {},
+) {
+  return function &lt;Args extends unknown[], R&gt;(
+    method: (this: This, ...args: [...Args, Control?]) => R | Promise&lt;R&gt;,
+    _context: ClassMethodDecoratorContext&lt;This&gt;,
+  ) {
+    // Con opciones fijas, un solo ejecutor para todas las instancias.
+    const shared = typeof options === "function" ? undefined : resilience(options);
+
+    return function (this: This, ...args: Args): Promise&lt;R&gt; {
+      const r =
+        shared ?? resilience((options as (self: This) => ResilienceOptions)(this));
+      return r.attempt((control) => method.call(this, ...args, control));
+    };
+  };
+}</code></pre></div>
+      <h3>2. Úsalo en una clase</h3>
+      <p>Declara <code>control</code> como último parámetro, opcional. Quien llama no lo pasa: el decorador lo entrega en cada intento.</p>
+<div class="code"><pre data-hl><code>class UsersApi {
+  @resilient({
+    attempts: 3,
+    timeout: 2_000,
+    delay: resilience.exponentialBackoff(200),
+  })
+  async getUser(id: string, control?: Control) {
+    const res = await fetch(`https://api.example.com/users/${id}`, {
+      signal: control?.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+}
+
+const user = await new UsersApi().getUser("42");</code></pre></div>
+      <h3>3. Opciones por instancia</h3>
+      <p>Si cada objeto tiene su propio <code>AbortController</code>, pasa una función que recibe la instancia. En ese caso el ejecutor se crea en cada llamada.</p>
+<div class="code"><pre data-hl><code>class Worker {
+  readonly abort = new AbortController();
+
+  @resilient((self: Worker) => ({ attempts: 3, signal: self.abort.signal }))
+  async process(job: Job, control?: Control) {
+    // ...
+  }
+
+  close() {
+    this.abort.abort();
+  }
+}</code></pre></div>
+      <h3>4. Agrega políticas con estado</h3>
+      <p>Crea las políticas fuera de la clase para que todas las instancias las compartan, y úsalas dentro del método con <code>execute</code>.</p>
+<div class="code"><pre data-hl><code>const breaker = resilience.circuitBreaker({ failureThreshold: 5 });
+
+class PaymentsApi {
+  @resilient({ attempts: 3, delay: resilience.exponentialBackoff(200) })
+  async charge(order: Order, control?: Control) {
+    return breaker.execute(() =>
+      fetch("https://payments.example.com/charge", {
+        method: "POST",
+        body: JSON.stringify(order),
+        signal: control?.signal,
+      }),
+    );
+  }
+}</code></pre></div>
+      <div class="note">
+        <p><code>control</code> siempre va al final, después de los argumentos que pasó quien llama. Si se omiten parámetros opcionales anteriores, cae en otra posición, así que prefiere parámetros fijos o un objeto de opciones. Con opciones fijas, la configuración la comparten todas las instancias. El método decorado siempre devuelve una promesa.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="inner">
+    <span>Licencia MIT · Jonathan Delgado</span>
+    <span><a href="https://github.com/JonDotsoy/resilience">GitHub</a> · <a href="https://www.npmjs.com/package/@jondotsoy/resilience">npm</a> · <a href="https://jon.soy">jon.soy</a></span>
+  </div>
+</footer>
+
+<script src="../assets/site.js"></script>
+</body>
+</html>
