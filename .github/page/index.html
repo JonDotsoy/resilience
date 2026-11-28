@@ -3,8 +3,72 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>resilience · Retries and cancellation for TypeScript</title>
-<meta name="description" content="Run a function with retries and cancellation through AbortSignal. Zero dependencies.">
+<title>resilience: retries, timeouts and circuit breakers for TypeScript</title>
+<meta name="description" content="@jondotsoy/resilience runs any function with retries, backoff, per-attempt timeouts and cancellation through AbortSignal, plus circuit breaker, bulkhead, throttle, cache and dedupe policies. TypeScript, zero dependencies.">
+<meta name="keywords" content="retry, backoff, timeout, AbortSignal, circuit breaker, bulkhead, throttle, fallback, TypeScript, JavaScript, npm">
+<meta name="author" content="Jonathan Delgado">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="https://jondotsoy.github.io/resilience/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1117" media="(prefers-color-scheme: dark)">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="resilience">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://jondotsoy.github.io/resilience/">
+<meta property="og:title" content="resilience: retries, timeouts and circuit breakers for TypeScript">
+<meta property="og:description" content="Run any function with retries, backoff, timeouts and AbortSignal cancellation. Circuit breaker, bulkhead, throttle, cache and dedupe included. Zero dependencies.">
+<meta property="og:image" content="https://jondotsoy.github.io/resilience/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="resilience: retries, timeouts and circuit breakers for TypeScript. npm i @jondotsoy/resilience">
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="resilience: retries, timeouts and circuit breakers for TypeScript">
+<meta name="twitter:description" content="Run any function with retries, backoff, timeouts and AbortSignal cancellation. Zero dependencies.">
+<meta name="twitter:image" content="https://jondotsoy.github.io/resilience/og-image.png">
+<meta name="twitter:image:alt" content="resilience: retries, timeouts and circuit breakers for TypeScript. npm i @jondotsoy/resilience">
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://jondotsoy.github.io/resilience/#library",
+      "name": "@jondotsoy/resilience",
+      "alternateName": "resilience",
+      "description": "Run a function with retries, backoff, per-attempt timeouts and cancellation through AbortSignal, plus circuit breaker, bulkhead, throttle, cache and dedupe policies. Zero dependencies.",
+      "url": "https://jondotsoy.github.io/resilience/",
+      "codeRepository": "https://github.com/JonDotsoy/resilience",
+      "programmingLanguage": ["TypeScript", "JavaScript"],
+      "version": "0.1.3",
+      "license": "https://opensource.org/licenses/MIT",
+      "keywords": ["retry", "backoff", "timeout", "AbortSignal", "circuit breaker", "bulkhead", "fallback"],
+      "image": "https://jondotsoy.github.io/resilience/og-image.png",
+      "sameAs": ["https://www.npmjs.com/package/@jondotsoy/resilience"],
+      "author": { "@id": "https://jon.soy/#person" }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://jon.soy/#person",
+      "name": "Jonathan Delgado",
+      "url": "https://jon.soy",
+      "sameAs": ["https://github.com/JonDotsoy"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://jondotsoy.github.io/resilience/#website",
+      "name": "resilience docs",
+      "url": "https://jondotsoy.github.io/resilience/",
+      "inLanguage": "en",
+      "about": { "@id": "https://jondotsoy.github.io/resilience/#library" },
+      "author": { "@id": "https://jon.soy/#person" }
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -469,9 +533,13 @@ footer a { color: var(--muted); }
   .lede { font-size: 17px; }
   .brand small { display: none; }
 }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 8px 14px; border-radius: 6px; background: var(--accent); color: var(--surface); font-weight: 600; text-decoration: none; }
+.skip-link:focus { top: 12px; }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#content">Skip to content</a>
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="#top" aria-label="resilience home">
@@ -525,7 +593,8 @@ footer a { color: var(--muted); }
   </aside>
 
   <div class="nav-backdrop" id="nav-backdrop" hidden></div>
-  <main>
+  <main id="content" tabindex="-1">
+    <h1 class="sr-only">resilience: retries, timeouts and circuit breakers for TypeScript</h1>
     <!-- USAGE -->
     <section id="usage">
       <h2>Usage<a class="anchor" href="#usage">#</a></h2>
