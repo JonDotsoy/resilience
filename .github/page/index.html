@@ -331,6 +331,9 @@ table.opts tr.group td span { display: block; font-weight: 400; font-size: 13px;
 /* Circuit breaker playground */
 .cb-state { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; font: 600 14px var(--mono); }
 .cb-state::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.sim-live.two { grid-template-columns: auto minmax(0, 1fr); }
+@media (max-width: 640px) { .sim-live.two { grid-template-columns: minmax(0, 1fr); } }
+.cb-state { white-space: nowrap; justify-self: start; }
 .cb-state small { font: 400 12px var(--body); color: var(--muted); }
 .cb-dots { align-items: center; }
 .cb-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
@@ -1004,8 +1007,25 @@ db.queued;  // waiting</code></pre></div>
       <h3 id="throttle"><code>throttle</code><a class="anchor" href="#throttle">#</a></h3>
 <div class="code"><pre data-hl><code>throttle(options) → { execute(fn), remaining }</code></pre></div>
       <p>At most <code>limit</code> calls in any span of <code>interval</code> ms. When exceeded it rejects with <code>ThrottleError</code>, whose <code>retryAfter</code> says how many ms remain until a slot frees up. Rejected calls do not use up slots.</p>
-      <p>Three consumers share one throttle (<code>limit: 3</code>, <code>interval: 5 steps</code>):</p>
-<figure class="tl" data-tl="throttle"></figure>
+      <p>Three consumers share one throttle. The playground starts with an example (<code>limit: 3</code>, <code>interval</code> of 5 steps). Pick who calls, press <strong>Next step</strong>, and change the limits to see how the sliding window fills and frees up.</p>
+<div class="sim" id="th-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">limit</span><div class="stepper"><button type="button" data-th="th-limit" data-d="-1" aria-label="Decrease limit">−</button><output id="th-limit">3</output><button type="button" data-th="th-limit" data-d="1" aria-label="Increase limit">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">interval (steps)</span><div class="stepper"><button type="button" data-th="th-win" data-d="-1" aria-label="Decrease interval (steps)">−</button><output id="th-win">5</output><button type="button" data-th="th-win" data-d="1" aria-label="Increase interval (steps)">+</button></div></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="th-example">Replay example</button><button type="button" class="btn" id="th-clear">Clear</button></div>
+        </div>
+        <div class="sim-live">
+          <div class="sim-pool"><span class="seg-lbl" id="th-win-lbl">Window</span><div class="boxes" id="th-slots"></div></div>
+          <div class="sim-pool"><span class="seg-lbl">remaining</span><div class="cb-state" id="th-left"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute() at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="th-step">Next step →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll" style="padding-top:26px"><div class="tl-grid" id="th-grid"></div></div>
+        <p class="sim-msg" id="th-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>allowed</span><span><i class="mk rej"></i>rejected with ThrottleError</span><span><i class="tl-window" style="position:static;display:inline-block;width:22px;height:14px"></i>sliding window</span></figcaption>
+      </div>
       <ul class="list">
         <li><strong>The limit is shared.</strong> A, B and C use the 3 slots in the first step, so the next tries from A and B do not call the service.</li>
         <li>Each <code>ThrottleError</code> carries <code>retryAfter</code>: the time left until the oldest call leaves the window.</li>
@@ -1034,8 +1054,24 @@ try {
       <h3 id="cache"><code>cache</code><a class="anchor" href="#cache">#</a></h3>
 <div class="code"><pre data-hl><code>cache(options) → { execute(key, fn), delete(key), clear(), size }</code></pre></div>
       <p>Stores the result of <code>fn</code> in memory for a <code>key</code> during <code>ttl</code> ms, counted from when the value arrives. A request that arrives while the first call is still in flight shares that execution. Errors are not cached.</p>
-      <p>Three consumers request the same key (<code>ttl: 5 steps</code>). The service takes 2 steps to respond:</p>
-<figure class="tl" data-tl="cache"></figure>
+      <p>Three consumers request the same key. The service takes 2 steps to respond. The playground starts with an example (<code>ttl</code> of 5 steps). Pick who calls, choose whether the next service call succeeds or fails, and press <strong>Next step</strong>. <strong>delete(key)</strong> invalidates the entry.</p>
+<div class="sim" id="ca-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">ttl (steps)</span><div class="stepper"><button type="button" data-ca="ca-ttl" data-d="-1" aria-label="Decrease ttl (steps)">−</button><output id="ca-ttl">5</output><button type="button" data-ca="ca-ttl" data-d="1" aria-label="Increase ttl (steps)">+</button></div></div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Next service call"><span class="seg-lbl">Next service call</span><button type="button" role="radio" data-ca-fail="0" aria-checked="true">succeeds</button><button type="button" role="radio" data-ca-fail="1" aria-checked="false">fails</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="ca-example">Replay example</button><button type="button" class="btn" id="ca-clear">Clear</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Entry for the key</span><div class="cb-state" id="ca-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute("config") at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="ca-step">Next step →</button><button type="button" class="btn" id="ca-del">delete(key)</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="ca-grid"></div></div>
+        <p class="sim-msg" id="ca-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>miss, calls the service</span><span><i class="run run-key"></i>waiting for the response</span><span><i class="mk hit"></i>hit</span><span><i class="mk share"></i>shares the in-flight call</span><span><i class="mk fail"></i>failing call, not cached</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>shared call that failed</span></figcaption>
+      </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
@@ -1056,7 +1092,24 @@ users.delete("user:42"); // invalidate an entry</code></pre></div>
       <h3 id="dedupe"><code>dedupe</code><a class="anchor" href="#dedupe">#</a></h3>
 <div class="code"><pre data-hl><code>dedupe() → { execute(key, fn), pending }</code></pre></div>
       <p>If a call with the same <code>key</code> is already in flight, it returns that same promise instead of running <code>fn</code> again. It does not store results: as soon as the call finishes, the key is released. Useful when several components request the same thing at once, like the configuration at startup.</p>
-<figure class="tl" data-tl="dedupe"></figure>
+      <p>Three consumers request the same key, and the service takes 2 steps to respond. Pick who calls and press <strong>Next step</strong>: whoever arrives while a call is in flight gets the same promise, and the key is free again as soon as it settles.</p>
+<div class="sim" id="dd-sim">
+        <div class="sim-bar">
+          
+          <div class="seg-ctl" role="radiogroup" aria-label="Next service call"><span class="seg-lbl">Next service call</span><button type="button" role="radio" data-dd-fail="0" aria-checked="true">succeeds</button><button type="button" role="radio" data-dd-fail="1" aria-checked="false">fails</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="dd-example">Replay example</button><button type="button" class="btn" id="dd-clear">Clear</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Key</span><div class="cb-state" id="dd-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute("config") at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="dd-step">Next step →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="dd-grid"></div></div>
+        <p class="sim-msg" id="dd-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>calls the service</span><span><i class="run run-key"></i>waiting for the response</span><span><i class="mk share"></i>receives the same promise</span><span><i class="mk fail"></i>failing call</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>shared call that failed</span></figcaption>
+      </div>
       <p>Unlike <code>cache</code>, <code>dedupe</code> only merges <strong>simultaneous</strong> requests. To reuse the value after it arrives, use <code>cache</code>.</p>
 <div class="code"><pre data-hl><code>const inFlight = resilience.dedupe();
 
@@ -1536,6 +1589,165 @@ class PaymentsApi {
     document.getElementById("bh-example").addEventListener("click", playExample);
     playExample();
   })();
+
+  // --- Shared helpers for the policy playgrounds ---
+  var WHO = ["A", "B", "C"];
+  function drawGrid(g, hist, meters, nMin, stepped) {
+    var n = Math.max(hist.length, nMin), h = "";
+    WHO.forEach(function (w) {
+      h += '<div class="tl-lbl who">' + w + "</div>";
+      for (var k = 0; k < n; k++) { var e = hist[k]; h += '<div class="tl-cell' + (k === hist.length - 1 ? " now" : "") + '" data-c="' + k + '">' + (e ? (MK[e.row[w]] || "") : "") + "</div>"; }
+    });
+    meters.forEach(function (m) {
+      h += '<div class="tl-lbl">' + m[0] + "</div>";
+      for (var k = 0; k < n; k++) { var e = hist[k], v = e ? e[m[1]] : ""; h += '<div class="tl-cell meter' + (m[2] && e && m[2](v) ? " hot" : "") + '">' + (v === undefined ? "" : v) + "</div>"; }
+    });
+    h += '<div class="tl-axis">time</div>';
+    g.style.setProperty("--n", n); g.innerHTML = h; g.classList.toggle("stepped", !!stepped);
+    followNow(g);
+  }
+  function pill(el, col, html, stepped, key) {
+    el.innerHTML = html; el.style.color = col; el.style.background = "color-mix(in srgb, " + col + " 12%, transparent)";
+    if (stepped && el.dataset.key !== undefined && el.dataset.key !== key) restart(el, "pulse");
+    el.dataset.key = key;
+  }
+  function wireSim(pfx, api) {
+    var root = document.getElementById(pfx + "-sim"), pending = {};
+    function sel() { return WHO.filter(function (w) { return pending[w]; }); }
+    root.querySelectorAll(".who-btn").forEach(function (b) {
+      b.addEventListener("click", function () { var w = b.dataset.who; if (pending[w]) delete pending[w]; else pending[w] = true; b.setAttribute("aria-pressed", String(!!pending[w])); });
+    });
+    document.getElementById(pfx + "-step").addEventListener("click", function () {
+      var arr = sel(); pending = {};
+      root.querySelectorAll(".who-btn").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+      api.next(arr);
+    });
+    root.querySelectorAll("[data-" + pfx + "]").forEach(function (b) {
+      b.addEventListener("click", function () { api.cfg(b.getAttribute("data-" + pfx), +b.dataset.d); });
+    });
+    document.getElementById(pfx + "-clear").addEventListener("click", api.clear);
+    document.getElementById(pfx + "-example").addEventListener("click", api.example);
+    api.example();
+  }
+  function setStepper(pfx, key, val, lo, hi) {
+    document.getElementById(key).textContent = val;
+    document.querySelectorAll('[data-' + pfx + '="' + key + '"]').forEach(function (b) { var v = val + (+b.dataset.d); b.disabled = v < lo || v > hi; });
+  }
+
+  // --- Throttle playground ---
+  (function () {
+    if (!document.getElementById("th-sim")) return;
+    var cfg = { limit: 3, win: 5 }, LIM = { "th-limit": ["limit", 1, 5], "th-win": ["win", 2, 8] }, MAXSTEPS = 24, st;
+    var EXAMPLE = [["A", "B", "C"], ["A"], ["B"], [], [], ["A", "C"], ["B"], ["C"], [], [], [], ["A", "B"]];
+    function reset() { st = { t: 0, used: [], hist: [] }; }
+    function step(arr) {
+      var row = { A: ".", B: ".", C: "." }, notes = [];
+      var before = st.used.length;
+      st.used = st.used.filter(function (u) { return st.t - u.t < cfg.win; });
+      if (st.used.length < before) notes.push((before - st.used.length) + " slot" + (before - st.used.length > 1 ? "s leave" : " leaves") + " the window");
+      arr.forEach(function (w) {
+        if (st.used.length < cfg.limit) { st.used.push({ who: w, t: st.t }); row[w] = "o"; notes.push(w + " is allowed"); }
+        else { var ra = st.used[0].t + cfg.win - st.t; row[w] = "r"; notes.push(w + " is rejected with ThrottleError, retryAfter " + ra + " step" + (ra > 1 ? "s" : "")); }
+      });
+      st.hist.push({ row: row, left: cfg.limit - st.used.length });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      st.t++;
+      return notes;
+    }
+    function render(msg, stepped) {
+      setStepper("th", "th-limit", cfg.limit, 1, 5); setStepper("th", "th-win", cfg.win, 2, 8);
+      document.getElementById("th-win-lbl").textContent = "Window · last " + cfg.win + " steps";
+      // Slots as they will be seen by the next call.
+      var live = st.used.filter(function (u) { return st.t - u.t < cfg.win; }), b = "";
+      for (var i = 0; i < cfg.limit; i++) {
+        var u = live[i];
+        b += u ? '<div class="box busy' + (stepped && u.t === st.t - 1 ? " fresh" : "") + '" title="frees up in ' + (u.t + cfg.win - st.t) + ' steps">' + u.who + '<i style="width:' + ((u.t + cfg.win - st.t) / cfg.win * 100) + "%;--from:" + ((u.t + cfg.win - st.t + 1) / cfg.win * 100) + '%"></i></div>' : '<div class="box"></div>';
+      }
+      document.getElementById("th-slots").innerHTML = b;
+      var left = cfg.limit - live.length;
+      pill(document.getElementById("th-left"), left ? "var(--ok)" : "var(--fail)", left + " <small>of " + cfg.limit + " for the next step</small>", stepped, String(!!left));
+      var g = document.getElementById("th-grid");
+      drawGrid(g, st.hist, [["slots left", "left", function (v) { return v === 0; }]], 12, stepped);
+      if (st.hist.length) {
+        var k = st.hist.length, a = g.querySelector('.tl-cell[data-c="' + Math.max(0, k - cfg.win) + '"]'), z = g.querySelector('.tl-cell[data-c="' + (k - 1) + '"]');
+        var win = document.createElement("div"); win.className = "tl-window";
+        win.innerHTML = "<b>window · " + cfg.win + " steps</b>";
+        win.style.left = (a.offsetLeft - 2) + "px"; win.style.width = (z.offsetLeft + z.offsetWidth - a.offsetLeft + 4) + "px";
+        g.insertBefore(win, g.firstChild);
+      }
+      document.getElementById("th-msg").textContent = msg || "";
+    }
+    wireSim("th", {
+      next: function (arr) { var n = step(arr); render("Step " + st.t + ": " + (n.length ? n.join(", ") + "." : "nothing happens."), true); },
+      cfg: function (key, d) { var c = LIM[key]; cfg[c[0]] += d; render("limit " + cfg.limit + ", interval " + cfg.win + " steps. Applies from the next step."); },
+      clear: function () { reset(); render("Cleared. Pick who calls and press Next step."); },
+      example: function () { cfg = { limit: 3, win: 5 }; reset(); EXAMPLE.forEach(step); render("Example: limit 3, interval 5 steps. Pick who calls and press Next step to continue."); }
+    });
+  })();
+
+  // --- cache and dedupe playgrounds (one key, the service takes 2 steps) ---
+  function keyedSim(pfx, isCache, example, ttl0) {
+    if (!document.getElementById(pfx + "-sim")) return;
+    var DUR = 2, MAXSTEPS = 24, cfg = { ttl: ttl0, fail: false }, st;
+    function reset() { st = { t: 0, flight: null, entry: null, hist: [] }; }
+    function setFail(f) {
+      cfg.fail = f;
+      document.querySelectorAll("[data-" + pfx + "-fail]").forEach(function (b) { b.setAttribute("aria-checked", String((b.getAttribute("data-" + pfx + "-fail") === "1") === f)); });
+    }
+    document.querySelectorAll("[data-" + pfx + "-fail]").forEach(function (b) {
+      b.addEventListener("click", function () { setFail(b.getAttribute("data-" + pfx + "-fail") === "1"); });
+    });
+    function step(arr) {
+      var row = { A: ".", B: ".", C: "." }, notes = [];
+      if (st.flight && st.t - st.flight.start >= DUR) {
+        var f = st.flight; st.flight = null;
+        if (f.fail) notes.push(f.who + "'s call fails" + (isCache ? ", nothing is cached" : " and the key is released"));
+        else if (isCache) { st.entry = { exp: st.t + cfg.ttl - 1 }; notes.push("the value arrives and is cached for " + cfg.ttl + " steps"); }
+        else notes.push(f.who + "'s call resolves and the key is released");
+      } else if (st.flight) row[st.flight.who] = "-";
+      if (st.entry && st.t > st.entry.exp) { st.entry = null; notes.push("the entry expires"); }
+      arr.forEach(function (w) {
+        if (isCache && st.entry) { row[w] = "h"; notes.push(w + " hits the cache"); }
+        else if (st.flight) {
+          if (st.flight.who === w) { notes.push(w + " is already waiting"); return; }
+          row[w] = st.flight.fail ? "S" : "s"; notes.push(w + " gets " + st.flight.who + "'s in-flight promise" + (st.flight.fail ? ", which will fail" : ""));
+        } else {
+          st.flight = { who: w, start: st.t, fail: cfg.fail }; row[w] = cfg.fail ? "x" : "o";
+          notes.push(w + (isCache ? " misses and calls the service" : " calls the service") + (cfg.fail ? " (it will fail)" : ""));
+        }
+      });
+      st.hist.push({ row: row, ttl: isCache && st.entry ? st.entry.exp - st.t + 1 : "", pend: st.flight ? 1 : 0 });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      st.t++;
+      return notes;
+    }
+    function render(msg, stepped) {
+      if (isCache) setStepper(pfx, pfx + "-ttl", cfg.ttl, 2, 8);
+      var el = document.getElementById(pfx + "-state"), f = st.flight, e = st.entry && st.t <= st.entry.exp;
+      if (f) pill(el, "var(--wait)", "in flight <small>" + f.who + "'s call" + (f.fail ? ", will fail" : "") + "</small>", stepped, "f");
+      else if (e) pill(el, "var(--accent)", "cached <small>" + (st.entry.exp - st.t + 1) + " step" + (st.entry.exp - st.t ? "s" : "") + " left</small>", stepped, "c");
+      else pill(el, "var(--muted)", (isCache ? "empty" : "free") + " <small>no call in flight</small>", stepped, "e");
+      drawGrid(document.getElementById(pfx + "-grid"), st.hist, isCache ? [["ttl", "ttl"]] : [["pending", "pend"]], isCache ? 16 : 13, stepped);
+      document.getElementById(pfx + "-msg").textContent = msg || "";
+    }
+    if (isCache) document.getElementById("ca-del").addEventListener("click", function () {
+      var had = st.entry && st.t <= st.entry.exp; st.entry = null;
+      render(had ? "delete(key): the entry is gone, the next call misses." : "delete(key): there was no cached entry.", true);
+    });
+    wireSim(pfx, {
+      next: function (arr) { var n = step(arr); render("Step " + st.t + ": " + (n.length ? n.join(", ") + "." : "nothing happens."), true); },
+      cfg: function (key, d) { cfg.ttl += d; render("ttl " + cfg.ttl + " steps. Applies to the next value that arrives."); },
+      clear: function () { reset(); setFail(false); render("Cleared. Pick who calls and press Next step."); },
+      example: function () {
+        cfg.ttl = ttl0; reset();
+        example.forEach(function (s) { setFail(!!s[1]); step(s[0]); });
+        setFail(false);
+        render("Example" + (isCache ? ": ttl " + ttl0 + " steps" : "") + ". Pick who calls and press Next step to continue.");
+      }
+    });
+  }
+  keyedSim("ca", true, [[["A"]], [["B"]], [["C"]], [[]], [["A"]], [[]], [["B"]], [[]], [["C", "A"], 1], [[]], [[]], [["B"]], [["C"]], [["A"]], [[]], [[]]], 5);
+  keyedSim("dd", false, [[["A"]], [["B"]], [["C"]], [["A"]], [[]], [["B"]], [[]], [[]], [["C", "A"], 1], [[]], [["B"]], [["C"]], [[]]], 0);
 
   // --- waitForTask behavior explorer ---
   var bx = { limit: "timeout", wait: "true", task: "ok" };
