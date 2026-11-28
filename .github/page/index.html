@@ -331,6 +331,9 @@ table.opts tr.group td span { display: block; font-weight: 400; font-size: 13px;
 /* Circuit breaker playground */
 .cb-state { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; font: 600 14px var(--mono); }
 .cb-state::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.sim-live.two { grid-template-columns: auto minmax(0, 1fr); }
+@media (max-width: 640px) { .sim-live.two { grid-template-columns: minmax(0, 1fr); } }
+.cb-state { white-space: nowrap; justify-self: start; }
 .cb-state small { font: 400 12px var(--body); color: var(--muted); }
 .cb-dots { align-items: center; }
 .cb-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
@@ -347,6 +350,96 @@ table.opts tr.group td span { display: block; font-weight: 400; font-size: 13px;
 .policy-grid a:hover { border-color: var(--accent); }
 .policy-grid b { font: 500 14px var(--mono); color: var(--accent); }
 .policy-grid span { display: block; font-size: 14px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+/* ---------- Motion & interactive additions ---------- */
+.copy.copied { color: var(--ok); border-color: var(--ok); }
+.policy-grid a { transition: border-color .15s, transform .15s; }
+.policy-grid a:hover { transform: translateY(-2px); }
+
+/* Lifecycle player */
+.lc { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 22px; overflow: hidden; }
+.lc .lifecycle { border: 0; border-radius: 0; margin: 0; }
+.lc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; background: var(--sunken); border-bottom: 1px solid var(--line); }
+.lc-bar .btn, .player .btn { padding: 6px 12px; font-size: 13px; }
+.lifecycle .hook { transition: background .25s, border-color .25s, color .25s, box-shadow .25s; }
+.lifecycle .hook.done { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--fg); }
+.lifecycle .hook.active { background: var(--accent); border-color: var(--accent); color: var(--surface); border-style: solid; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.lifecycle .loop[data-att]::after { content: "attempt " attr(data-att); position: absolute; top: -9px; right: 10px; background: var(--surface); padding: 0 6px; font-size: 11px; color: var(--accent); }
+.lc-log { margin: 0; padding: 10px 16px 14px 44px; border-top: 1px solid var(--line); font: 12.5px/1.75 var(--mono); color: var(--muted); min-height: 3.6em; max-height: 260px; overflow-y: auto; }
+.lc-log li { max-width: none; }
+.lc-log li b { color: var(--accent); font-weight: 500; }
+.lc-log li.new { animation: fade-in .3s ease both; }
+.lc-log li.end { color: var(--fg); }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Backoff explorer */
+.bo { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 20px; overflow: hidden; }
+.bo .bx-controls { align-items: center; }
+.bo-chart { display: flex; align-items: flex-end; gap: 10px; height: 180px; padding: 30px 16px 0; border-bottom: 1px solid var(--line); }
+.bo-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.bo-range { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 6px 6px 0 0; border: 1px dashed var(--wait); border-bottom: 0; background: color-mix(in srgb, var(--wait) 8%, transparent); transition: height .45s cubic-bezier(.2,.7,.2,1); }
+.bo-fill { position: relative; width: 100%; border-radius: 6px 6px 0 0; background: var(--wait); transition: height .45s cubic-bezier(.2,.7,.2,1); }
+.bo-fill.capped { background: repeating-linear-gradient(135deg, var(--wait) 0 6px, color-mix(in srgb, var(--wait) 70%, var(--surface)) 6px 12px); }
+.bo-val { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); font: 500 11px var(--mono); color: var(--fg); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bo-x { display: flex; gap: 10px; padding: 6px 16px 12px; font: 11px var(--mono); color: var(--muted); }
+.bo-x i { font-style: normal; }
+@media (max-width: 640px) { .bo-x i { display: none; } .bo-val { font-size: 10px; } .bo-chart, .bo-x { gap: 6px; } }
+.bo-x span { flex: 1 1 0; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bo .tc-code { border-top: 1px solid var(--line); }
+.bo-run { border-top: 1px solid var(--line); }
+.bo-run-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; padding: 12px 16px 0; font: 12px var(--mono); color: var(--muted); }
+.bo-run-head b { color: var(--fg); font-weight: 500; }
+.bo-run .track { padding: 26px 16px 4px; }
+.bo-run .lane { gap: 0; }
+
+
+.bo-run .seg.att { color: var(--surface); overflow: hidden; }
+.bo-run .seg.att.fail { background: var(--fail); }
+.bo-run .seg.att.ok { background: var(--ok); }
+.bo-cap { margin: 0; padding: 0 16px 14px; font-size: 13px; color: var(--muted); max-width: none; }
+
+/* Step player for the static policy timelines */
+.player { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--sunken); border-radius: 12px 12px 0 0; }
+.player .p-step { font: 500 12px var(--mono); color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.player-msg { margin: 0; padding: 0 16px 12px; font-size: 14px; color: var(--muted); min-height: 1.6em; max-width: none; }
+.tl-grid { position: relative; }
+.tl-cell.off > * { opacity: 0; transform: scale(.4); }
+.tl-cell.off > .mk.hit { transform: rotate(45deg) scale(.4); }
+.tl-cell.off.meter { color: transparent; }
+.tl-cell > * { transition: opacity .25s ease, transform .25s ease; }
+.tl-cell.meter { transition: color .25s ease; }
+.tl-window { position: absolute; top: 0; bottom: 22px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); pointer-events: none; transition: left .35s ease, width .35s ease, opacity .25s; z-index: 0; }
+.tl-window b { position: absolute; top: -1px; right: 6px; transform: translateY(-100%); font: 500 10px var(--mono); color: var(--accent); white-space: nowrap; }
+.tl-figure-anim .tl-scroll { padding-top: 26px; }
+
+/* Playground motion */
+@media (prefers-reduced-motion: no-preference) {
+  .stepped .tl-cell.now > .mk, .stepped .tl-cell.now > .run { animation: pop .38s cubic-bezier(.2,.9,.3,1.4) both; }
+  .stepped .tl-cell.now > .mk:nth-child(2) { animation-delay: .08s; }
+  @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .stepped .tl-cell.now > .mk.hit { animation-name: pop-hit; }
+  @keyframes pop-hit { from { transform: rotate(45deg) scale(0); } to { transform: rotate(45deg) scale(1); } }
+  .cb-state.pulse { animation: pulse .6s ease; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); transform: scale(1); } 40% { transform: scale(1.06); } 100% { box-shadow: 0 0 0 12px transparent; transform: scale(1); } }
+  .cb-dot.fresh { animation: pop .35s cubic-bezier(.2,.9,.3,1.4); }
+  .box.fresh { animation: pop .35s cubic-bezier(.2,.9,.3,1.4); }
+  .box.busy i { animation: grow-bar .5s ease both; }
+  @keyframes grow-bar { from { width: var(--from, 0%); } }
+  .stepped .tl-cell.now { animation: col-in .3s ease; }
+  @keyframes col-in { from { background: color-mix(in srgb, var(--accent) 18%, transparent); } }
+  .bx-bar.ghost { background-size: 14px 14px; animation: stripes 1s linear infinite; }
+  @keyframes stripes { to { background-position: 14px 0; } }
+  .bx-stage.sweep .bx-layer { animation: reveal 1.8s linear both; }
+  @keyframes reveal { from { clip-path: inset(-30px 100% -30px -40px); } to { clip-path: inset(-30px -300px -30px -40px); } }
+  .bx-stage.sweep .bx-cur { animation: cursor 1.8s linear both; }
+  @keyframes cursor { from { left: 0; opacity: 1; } 92% { opacity: 1; } to { left: 100%; opacity: 0; } }
+  .bo-run .track.play .seg { animation: grow .45s cubic-bezier(.2,.7,.2,1) both; transform-origin: left center; }
+  .bo-run .track.play .seg.gap { animation-timing-function: linear; }
+}
+.bx-layer { position: absolute; inset: 0; }
+.bx-cur { position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px; background: var(--accent); opacity: 0; pointer-events: none; z-index: 2; border-radius: 1px; }
+.bx-replay { margin-left: auto; }
+.bx-replay .btn { padding: 5px 11px; font-size: 13px; }
 
 footer { border-top: 1px solid var(--line); }
 footer .inner { max-width: 1240px; margin: 0 auto; padding-block: 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; font-size: 14px; color: var(--muted); }
@@ -486,17 +579,32 @@ const res = await resilience({ attempts: 3 }).attempt(({ signal }) =>
     <section id="lifecycle">
       <h2>Lifecycle hooks<a class="anchor" href="#lifecycle">#</a></h2>
       <p class="section-lede">Besides <code>onRetry</code>, the options accept <code>on&lt;Event&gt;</code> hooks that run in this order.</p>
-      <div class="lifecycle" role="img" aria-label="onStart, then for each attempt onAttempt, onTimeout, onError, onRetry; then onSuccess or onFailure or onAbort; then onSettled">
-        <span class="hook">onStart</span><span class="arrow">→</span>
-        <div class="loop">
-          <span class="hook">onAttempt</span><span class="arrow">→</span>
-          <span class="hook opt">onTimeout?</span><span class="arrow">→</span>
-          <span class="hook opt">onError?</span><span class="arrow">→</span>
-          <span class="hook opt">onRetry?</span>
+      <div class="lc" id="lc">
+        <div class="lc-bar">
+          <div class="seg-ctl" role="radiogroup" aria-label="Scenario">
+            <span class="seg-lbl">Scenario</span>
+            <button type="button" role="radio" data-lc="ok" aria-checked="false">first try</button>
+            <button type="button" role="radio" data-lc="retry" aria-checked="true">retry, then success</button>
+            <button type="button" role="radio" data-lc="timeout" aria-checked="false">timeout, then success</button>
+            <button type="button" role="radio" data-lc="fail" aria-checked="false">all fail</button>
+            <button type="button" role="radio" data-lc="fallback" aria-checked="false">all fail + fallback</button>
+            <button type="button" role="radio" data-lc="abort" aria-checked="false">aborted</button>
+          </div>
+          <button type="button" class="btn primary bx-replay" id="lc-play">▶ Play</button>
         </div>
-        <span class="arrow">→</span>
-        <span class="hook">onSuccess</span><span class="or">or</span><span class="hook">onFailure</span><span class="or">or</span><span class="hook">onAbort</span>
-        <span class="arrow">→</span><span class="hook">onSettled</span>
+        <div class="lifecycle" role="img" aria-label="onStart, then for each attempt onAttempt, onTimeout, onError, onRetry; then onSuccess or onFailure or onAbort; then onSettled">
+          <span class="hook" data-hook="onStart">onStart</span><span class="arrow">→</span>
+          <div class="loop" id="lc-loop">
+            <span class="hook" data-hook="onAttempt">onAttempt</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onTimeout">onTimeout?</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onError">onError?</span><span class="arrow">→</span>
+            <span class="hook opt" data-hook="onRetry">onRetry?</span>
+          </div>
+          <span class="arrow">→</span>
+          <span class="hook" data-hook="onSuccess">onSuccess</span><span class="or">or</span><span class="hook" data-hook="onFailure">onFailure</span><span class="or">or</span><span class="hook" data-hook="onAbort">onAbort</span>
+          <span class="arrow">→</span><span class="hook" data-hook="onSettled">onSettled</span>
+        </div>
+        <ol class="lc-log" id="lc-log" aria-live="polite"></ol>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Hook</th><th>Arguments</th><th>When</th></tr></thead>
@@ -618,6 +726,7 @@ const result = await resilience({ timeout: 1_000 }).attempt(
             <button type="button" role="radio" data-k="task" data-v="ok" aria-checked="true">succeeds</button>
             <button type="button" role="radio" data-k="task" data-v="fail" aria-checked="false">throws</button>
           </div>
+          <div class="bx-replay"><button type="button" class="btn" id="bx-replay">▶ Replay</button></div>
         </div>
         <div class="bx-stage">
           <div class="bx-lane"><span class="bx-name">task</span><div class="bx-track" id="bx-task"></div></div>
@@ -711,6 +820,46 @@ await resilience({
           <tr><td><code>fibonacciBackoff(ms)</code></td><td><code>100, 100, 200, 300, 500, …</code></td></tr>
         </tbody>
       </table></div>
+      <p>Try the helpers below. Each bar is the wait before one retry. With <code>jitter</code>, the dashed outline is the computed delay and the solid bar is one random draw.</p>
+      <div class="bo" id="bo">
+        <div class="bx-controls">
+          <div class="seg-ctl" role="radiogroup" aria-label="Helper">
+            <span class="seg-lbl">Helper</span>
+            <button type="button" role="radio" data-bo="fn" data-v="fixed" aria-checked="false">fixed</button>
+            <button type="button" role="radio" data-bo="fn" data-v="linear" aria-checked="false">linear</button>
+            <button type="button" role="radio" data-bo="fn" data-v="exponential" aria-checked="true">exponential</button>
+            <button type="button" role="radio" data-bo="fn" data-v="fibonacci" aria-checked="false">fibonacci</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Base delay">
+            <span class="seg-lbl">ms</span>
+            <button type="button" role="radio" data-bo="ms" data-v="100" aria-checked="false">100</button>
+            <button type="button" role="radio" data-bo="ms" data-v="200" aria-checked="true">200</button>
+            <button type="button" role="radio" data-bo="ms" data-v="500" aria-checked="false">500</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="maxDelay">
+            <span class="seg-lbl">maxDelay</span>
+            <button type="button" role="radio" data-bo="max" data-v="0" aria-checked="true">none</button>
+            <button type="button" role="radio" data-bo="max" data-v="2000" aria-checked="false">2 s</button>
+            <button type="button" role="radio" data-bo="max" data-v="5000" aria-checked="false">5 s</button>
+          </div>
+          <div class="seg-ctl" role="radiogroup" aria-label="jitter">
+            <span class="seg-lbl">jitter</span>
+            <button type="button" role="radio" data-bo="jit" data-v="" aria-checked="true">none</button>
+            <button type="button" role="radio" data-bo="jit" data-v="full" aria-checked="false"><code>"full"</code></button>
+            <button type="button" role="radio" data-bo="jit" data-v="equal" aria-checked="false"><code>"equal"</code></button>
+          </div>
+          <div class="sim-group"><span class="seg-lbl">attempts</span><div class="stepper"><button type="button" data-bo-att="-1" aria-label="Fewer attempts">−</button><output id="bo-att">6</output><button type="button" data-bo-att="1" aria-label="More attempts">+</button></div></div>
+        </div>
+        <div class="bo-chart" id="bo-chart" role="img" aria-label="Delay before each retry"></div>
+        <div class="bo-x" id="bo-x"></div>
+        <pre class="tc-code" id="bo-code"></pre>
+        <div class="bo-run">
+          <div class="bo-run-head"><span>Every attempt fails except the last · each attempt takes <b>300 ms</b></span><span><button type="button" class="replay" id="bo-roll" hidden>↻ new draw</button> <button type="button" class="replay" id="bo-play">▶ run</button></span></div>
+          <div class="track" id="bo-track"><div class="lane" id="bo-lane"></div></div>
+          <div class="axis"><span>0 ms</span><span id="bo-total"></span></div>
+          <p class="bo-cap" id="bo-cap"></p>
+        </div>
+      </div>
 <div class="code"><pre data-hl><code>import { resilience, exponentialBackoff } from "@jondotsoy/resilience";
 
 await resilience({
@@ -752,7 +901,7 @@ const breaker = resilience.circuitBreaker({ failureThreshold: 3 });</code></pre>
           <div class="sim-group"><span class="seg-lbl">successThreshold</span><div class="stepper"><button type="button" data-cb="succ" data-d="-1" aria-label="Decrease successThreshold">−</button><output id="cb-succ">1</output><button type="button" data-cb="succ" data-d="1" aria-label="Increase successThreshold">+</button></div></div>
           <div class="sim-group sim-right">
             <button type="button" class="btn" id="cb-example">Replay example</button>
-            <button type="button" class="btn" id="cb-reset">Clear</button>
+            <button type="button" class="btn" id="cb-clear">Clear</button>
           </div>
         </div>
         <div class="sim-live cb-live">
@@ -858,8 +1007,25 @@ db.queued;  // waiting</code></pre></div>
       <h3 id="throttle"><code>throttle</code><a class="anchor" href="#throttle">#</a></h3>
 <div class="code"><pre data-hl><code>throttle(options) → { execute(fn), remaining }</code></pre></div>
       <p>At most <code>limit</code> calls in any span of <code>interval</code> ms. When exceeded it rejects with <code>ThrottleError</code>, whose <code>retryAfter</code> says how many ms remain until a slot frees up. Rejected calls do not use up slots.</p>
-      <p>Three consumers share one throttle (<code>limit: 3</code>, <code>interval: 5 steps</code>):</p>
-<figure class="tl" data-tl="throttle"></figure>
+      <p>Three consumers share one throttle. The playground starts with an example (<code>limit: 3</code>, <code>interval</code> of 5 steps). Pick who calls, press <strong>Next step</strong>, and change the limits to see how the sliding window fills and frees up.</p>
+<div class="sim" id="th-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">limit</span><div class="stepper"><button type="button" data-th="th-limit" data-d="-1" aria-label="Decrease limit">−</button><output id="th-limit">3</output><button type="button" data-th="th-limit" data-d="1" aria-label="Increase limit">+</button></div></div>
+          <div class="sim-group"><span class="seg-lbl">interval (steps)</span><div class="stepper"><button type="button" data-th="th-win" data-d="-1" aria-label="Decrease interval (steps)">−</button><output id="th-win">5</output><button type="button" data-th="th-win" data-d="1" aria-label="Increase interval (steps)">+</button></div></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="th-example">Replay example</button><button type="button" class="btn" id="th-clear">Clear</button></div>
+        </div>
+        <div class="sim-live">
+          <div class="sim-pool"><span class="seg-lbl" id="th-win-lbl">Window</span><div class="boxes" id="th-slots"></div></div>
+          <div class="sim-pool"><span class="seg-lbl">remaining</span><div class="cb-state" id="th-left"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute() at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="th-step">Next step →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll" style="padding-top:26px"><div class="tl-grid" id="th-grid"></div></div>
+        <p class="sim-msg" id="th-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>allowed</span><span><i class="mk rej"></i>rejected with ThrottleError</span><span><i class="tl-window" style="position:static;display:inline-block;width:22px;height:14px"></i>sliding window</span></figcaption>
+      </div>
       <ul class="list">
         <li><strong>The limit is shared.</strong> A, B and C use the 3 slots in the first step, so the next tries from A and B do not call the service.</li>
         <li>Each <code>ThrottleError</code> carries <code>retryAfter</code>: the time left until the oldest call leaves the window.</li>
@@ -888,8 +1054,24 @@ try {
       <h3 id="cache"><code>cache</code><a class="anchor" href="#cache">#</a></h3>
 <div class="code"><pre data-hl><code>cache(options) → { execute(key, fn), delete(key), clear(), size }</code></pre></div>
       <p>Stores the result of <code>fn</code> in memory for a <code>key</code> during <code>ttl</code> ms, counted from when the value arrives. A request that arrives while the first call is still in flight shares that execution. Errors are not cached.</p>
-      <p>Three consumers request the same key (<code>ttl: 5 steps</code>). The service takes 2 steps to respond:</p>
-<figure class="tl" data-tl="cache"></figure>
+      <p>Three consumers request the same key. The service takes 2 steps to respond. The playground starts with an example (<code>ttl</code> of 5 steps). Pick who calls, choose whether the next service call succeeds or fails, and press <strong>Next step</strong>. <strong>delete(key)</strong> invalidates the entry.</p>
+<div class="sim" id="ca-sim">
+        <div class="sim-bar">
+          <div class="sim-group"><span class="seg-lbl">ttl (steps)</span><div class="stepper"><button type="button" data-ca="ca-ttl" data-d="-1" aria-label="Decrease ttl (steps)">−</button><output id="ca-ttl">5</output><button type="button" data-ca="ca-ttl" data-d="1" aria-label="Increase ttl (steps)">+</button></div></div>
+          <div class="seg-ctl" role="radiogroup" aria-label="Next service call"><span class="seg-lbl">Next service call</span><button type="button" role="radio" data-ca-fail="0" aria-checked="true">succeeds</button><button type="button" role="radio" data-ca-fail="1" aria-checked="false">fails</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="ca-example">Replay example</button><button type="button" class="btn" id="ca-clear">Clear</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Entry for the key</span><div class="cb-state" id="ca-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute("config") at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="ca-step">Next step →</button><button type="button" class="btn" id="ca-del">delete(key)</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="ca-grid"></div></div>
+        <p class="sim-msg" id="ca-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>miss, calls the service</span><span><i class="run run-key"></i>waiting for the response</span><span><i class="mk hit"></i>hit</span><span><i class="mk share"></i>shares the in-flight call</span><span><i class="mk fail"></i>failing call, not cached</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>shared call that failed</span></figcaption>
+      </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
@@ -910,7 +1092,24 @@ users.delete("user:42"); // invalidate an entry</code></pre></div>
       <h3 id="dedupe"><code>dedupe</code><a class="anchor" href="#dedupe">#</a></h3>
 <div class="code"><pre data-hl><code>dedupe() → { execute(key, fn), pending }</code></pre></div>
       <p>If a call with the same <code>key</code> is already in flight, it returns that same promise instead of running <code>fn</code> again. It does not store results: as soon as the call finishes, the key is released. Useful when several components request the same thing at once, like the configuration at startup.</p>
-<figure class="tl" data-tl="dedupe"></figure>
+      <p>Three consumers request the same key, and the service takes 2 steps to respond. Pick who calls and press <strong>Next step</strong>: whoever arrives while a call is in flight gets the same promise, and the key is free again as soon as it settles.</p>
+<div class="sim" id="dd-sim">
+        <div class="sim-bar">
+          
+          <div class="seg-ctl" role="radiogroup" aria-label="Next service call"><span class="seg-lbl">Next service call</span><button type="button" role="radio" data-dd-fail="0" aria-checked="true">succeeds</button><button type="button" role="radio" data-dd-fail="1" aria-checked="false">fails</button></div>
+          <div class="sim-group sim-right"><button type="button" class="btn" id="dd-example">Replay example</button><button type="button" class="btn" id="dd-clear">Clear</button></div>
+        </div>
+        <div class="sim-live two">
+          <div class="sim-pool"><span class="seg-lbl">Key</span><div class="cb-state" id="dd-state"></div></div>
+          <div class="sim-calls">
+            <span class="seg-lbl">Call execute("config") at the next step</span>
+            <div class="calls"><button type="button" class="who-btn" data-who="A" aria-pressed="false">A</button><button type="button" class="who-btn" data-who="B" aria-pressed="false">B</button><button type="button" class="who-btn" data-who="C" aria-pressed="false">C</button><button type="button" class="btn primary" id="dd-step">Next step →</button></div>
+          </div>
+        </div>
+        <div class="tl-scroll"><div class="tl-grid" id="dd-grid"></div></div>
+        <p class="sim-msg" id="dd-msg" aria-live="polite"></p>
+        <figcaption class="tl-legend"><span><i class="mk ok"></i>calls the service</span><span><i class="run run-key"></i>waiting for the response</span><span><i class="mk share"></i>receives the same promise</span><span><i class="mk fail"></i>failing call</span><span><i class="mk share sm"></i><i class="mk fail sm"></i>shared call that failed</span></figcaption>
+      </div>
       <p>Unlike <code>cache</code>, <code>dedupe</code> only merges <strong>simultaneous</strong> requests. To reuse the value after it arrives, use <code>cache</code>.</p>
 <div class="code"><pre data-hl><code>const inFlight = resilience.dedupe();
 
@@ -1052,7 +1251,7 @@ class PaymentsApi {
 
   // --- Copy buttons on code blocks ---
   function copyText(text, btn) {
-    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1400); };
+    var done = function () { btn.textContent = "Copied ✓"; btn.classList.add("copied"); setTimeout(function () { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1400); };
     try {
       navigator.clipboard.writeText(text).then(done, function () { selectFallback(btn); });
     } catch (e) { selectFallback(btn); }
@@ -1064,6 +1263,13 @@ class PaymentsApi {
     var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
     btn.textContent = "Press ⌘C";
   }
+  var RM = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function onVisible(el, fn) {
+    if (!el || !("IntersectionObserver" in window)) return;
+    var io = new IntersectionObserver(function (es) { if (es[0].isIntersecting) { io.disconnect(); fn(); } }, { threshold: 0.45 });
+    io.observe(el);
+  }
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
   document.querySelectorAll(".code").forEach(function (box) {
     var b = document.createElement("button");
     b.className = "copy"; b.type = "button"; b.textContent = "Copy";
@@ -1107,7 +1313,7 @@ class PaymentsApi {
     throttle: {
       label: "Throttle timeline shared by consumers A, B and C",
       rows: [["A", "or...o.....o"], ["B", "o.r...o....o"], ["C", "o....o.r...."]],
-      meters: [["slots left", [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 1]]],
+      meters: [["slots left", [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 1]]], window: 5,
       legend: [["o", "allowed"], ["r", "rejected with ThrottleError"]]
     },
     cache: {
@@ -1136,17 +1342,64 @@ class PaymentsApi {
     }
     d.rows.forEach(function (r) {
       h += '<div class="tl-lbl who">' + r[0] + "</div>";
-      for (var i = 0; i < n; i++) h += '<div class="tl-cell">' + (MK[r[1][i]] || "") + "</div>";
+      for (var i = 0; i < n; i++) h += '<div class="tl-cell" data-c="' + i + '">' + (MK[r[1][i]] || "") + "</div>";
     });
     (d.meters || []).forEach(function (m) {
       h += '<div class="tl-lbl">' + m[0] + "</div>";
-      m[1].forEach(function (v) { h += '<div class="tl-cell meter' + (m[2] !== undefined && v === m[2] ? " hot" : "") + '">' + v + "</div>"; });
+      m[1].forEach(function (v, i) { h += '<div class="tl-cell meter' + (m[2] !== undefined && v === m[2] ? " hot" : "") + '" data-c="' + i + '">' + v + "</div>"; });
     });
     h += '<div class="tl-axis">time</div>';
     var lg = d.legend.map(function (l) { return "<span>" + LEGEND_MK[l[0]] + l[1] + "</span>"; }).join("");
     fig.setAttribute("role", "img"); fig.setAttribute("aria-label", d.label);
-    fig.innerHTML = '<div class="tl-scroll"><div class="tl-grid" style="--n:' + n + '">' + h + '</div></div><figcaption class="tl-legend">' + lg + "</figcaption>";
+    var win = d.window ? '<div class="tl-window" style="opacity:0"><b>window · last ' + d.window + ' steps</b></div>' : "";
+    if (d.window) fig.classList.add("tl-figure-anim");
+    fig.innerHTML = '<div class="player"><button type="button" class="btn primary p-play">▶ Play</button><button type="button" class="btn p-next">Step →</button><button type="button" class="btn p-all">Show all</button><span class="p-step"></span></div>' +
+      '<div class="tl-scroll"><div class="tl-grid" style="--n:' + n + '">' + win + h + '</div></div><p class="player-msg" aria-live="polite"></p><figcaption class="tl-legend">' + lg + "</figcaption>";
+    initPlayer(fig, d, n);
   });
+
+  function initPlayer(fig, d, n) {
+    var grid = fig.querySelector(".tl-grid"), cells = fig.querySelectorAll("[data-c]"), winEl = fig.querySelector(".tl-window");
+    var playBtn = fig.querySelector(".p-play"), msg = fig.querySelector(".player-msg"), lbl = fig.querySelector(".p-step");
+    var DESC = {}; d.legend.forEach(function (l) { DESC[l[0]] = l[1]; });
+    DESC.P = DESC.p; DESC.F = DESC.p;
+    var cur = n, active = false, timer = null;
+    function describe(i) {
+      var parts = [];
+      d.rows.forEach(function (r) { var t = r[1][i]; if (t !== "." && DESC[t]) parts.push(r[0] + ": " + DESC[t]); });
+      (d.meters || []).forEach(function (m) { var v = m[1][i]; if (v !== "" && v !== undefined) parts.push(m[0] + " " + v); });
+      return parts.length ? parts.join(" · ") : "nothing happens";
+    }
+    function show(k) {
+      cur = k;
+      cells.forEach(function (c) { var i = +c.dataset.c; c.classList.toggle("off", active && i >= k); c.classList.toggle("now", active && i === k - 1); });
+      grid.classList.toggle("stepped", active);
+      lbl.textContent = active ? "step " + k + " / " + n : n + " steps";
+      msg.textContent = active ? (k ? "Step " + k + ": " + describe(k - 1) + "." : "Press Play or Step.") : "Press Play to watch it step by step.";
+      if (winEl) {
+        if (active && k > 0) {
+          var a = grid.querySelector('.tl-cell[data-c="' + Math.max(0, k - d.window) + '"]'), b = grid.querySelector('.tl-cell[data-c="' + (k - 1) + '"]');
+          winEl.style.left = (a.offsetLeft - 2) + "px"; winEl.style.width = (b.offsetLeft + b.offsetWidth - a.offsetLeft + 4) + "px"; winEl.style.opacity = 1;
+        } else winEl.style.opacity = 0;
+      }
+      var now = grid.querySelector(".tl-cell.now"), sc = grid.parentElement;
+      if (now && (now.offsetLeft + now.offsetWidth > sc.scrollLeft + sc.clientWidth || now.offsetLeft < sc.scrollLeft + 92)) sc.scrollLeft = Math.max(0, now.offsetLeft - sc.clientWidth / 2);
+      if (!active) sc.scrollLeft = 0;
+    }
+    function stop() { clearInterval(timer); timer = null; playBtn.textContent = cur >= n ? "↻ Replay" : "▶ Play"; }
+    function next() { if (!active || cur >= n) { active = true; show(0); } show(cur + 1); if (cur >= n) stop(); }
+    function play() {
+      if (timer) { stop(); return; }
+      if (!active || cur >= n) { active = true; show(0); }
+      playBtn.textContent = "❚❚ Pause";
+      timer = setInterval(next, 800);
+    }
+    playBtn.addEventListener("click", play);
+    fig.querySelector(".p-next").addEventListener("click", function () { if (timer) stop(); next(); playBtn.textContent = cur >= n ? "↻ Replay" : "▶ Play"; });
+    fig.querySelector(".p-all").addEventListener("click", function () { if (timer) stop(); active = false; show(n); playBtn.textContent = "▶ Play"; });
+    show(n);
+    if (!RM) onVisible(fig, function () { if (!active) play(); });
+  }
 
   function followNow(g) {
     var sc = g.parentElement, now = g.querySelector(".tl-cell.now");
@@ -1190,7 +1443,8 @@ class PaymentsApi {
     }
     var STATE_TXT = { closed: ["closed", "calls go through"], open: ["open", "calls are rejected"], half: ["half-open", "next call is a probe"] };
     var PH_CLS = { closed: "ph-closed", open: "ph-open", half: "ph-half" };
-    function render(msg) {
+    var prevState = null;
+    function render(msg, stepped) {
       Object.keys(cfg).forEach(function (k) { document.getElementById("cb-" + k).textContent = cfg[k]; });
       document.querySelectorAll("#cb-sim [data-cb]").forEach(function (b) {
         var k = b.dataset.cb, v = cfg[k] + (+b.dataset.d); b.disabled = v < LIM[k][0] || v > LIM[k][1];
@@ -1201,10 +1455,12 @@ class PaymentsApi {
       var col = cur === "closed" ? "var(--ok)" : cur === "half" ? "var(--wait)" : "var(--fail)";
       stEl.innerHTML = txt[0] + " <small>" + txt[1] + "</small>";
       stEl.style.color = col; stEl.style.background = "color-mix(in srgb, " + col + " 12%, transparent)";
+      if (stepped && prevState !== null && prevState !== st.state) restart(stEl, "pulse");
+      prevState = st.state;
       var m = "", lbl = document.getElementById("cb-meter-lbl");
-      if (st.state === "closed") { lbl.textContent = "Consecutive failures"; for (var i = 0; i < cfg.thr; i++) m += '<i class="cb-dot' + (i < st.fails ? " on" : "") + '"></i>'; m += '<span class="cb-count">' + st.fails + "/" + cfg.thr + "</span>"; }
+      if (st.state === "closed") { lbl.textContent = "Consecutive failures"; for (var i = 0; i < cfg.thr; i++) m += '<i class="cb-dot' + (i < st.fails ? " on" : "") + (stepped && i === st.fails - 1 ? " fresh" : "") + '"></i>'; m += '<span class="cb-count">' + st.fails + "/" + cfg.thr + "</span>"; }
       else if (st.state === "open") { lbl.textContent = "Steps until half-open"; var left = Math.max(0, cfg.reset - (st.t - st.openedAt)); for (var j = 0; j < cfg.reset; j++) m += '<i class="cb-dot' + (j < left ? " on" : "") + '"></i>'; m += '<span class="cb-count">' + left + "</span>"; }
-      else { lbl.textContent = "Probe successes"; for (var k2 = 0; k2 < cfg.succ; k2++) m += '<i class="cb-dot' + (k2 < st.succ ? " ok" : "") + '"></i>'; m += '<span class="cb-count">' + st.succ + "/" + cfg.succ + "</span>"; }
+      else { lbl.textContent = "Probe successes"; for (var k2 = 0; k2 < cfg.succ; k2++) m += '<i class="cb-dot' + (k2 < st.succ ? " ok" : "") + (stepped && k2 === st.succ - 1 ? " fresh" : "") + '"></i>'; m += '<span class="cb-count">' + st.succ + "/" + cfg.succ + "</span>"; }
       document.getElementById("cb-meter").innerHTML = m;
       var n = Math.max(st.hist.length, 10), h = '<div class="tl-lbl">state</div>';
       var i0 = 0;
@@ -1224,7 +1480,7 @@ class PaymentsApi {
       h += '<div class="tl-lbl">failures</div>';
       for (var c2 = 0; c2 < n; c2++) { var e2 = st.hist[c2]; h += '<div class="tl-cell meter' + (e2 && e2.fails !== "" && e2.fails >= cfg.thr ? " hot" : "") + '">' + (e2 ? e2.fails : "") + "</div>"; }
       h += '<div class="tl-axis">time</div>';
-      var g = document.getElementById("cb-grid"); g.style.setProperty("--n", n); g.innerHTML = h;
+      var g = document.getElementById("cb-grid"); g.style.setProperty("--n", n); g.innerHTML = h; g.classList.toggle("stepped", !!stepped);
       followNow(g);
       document.getElementById("cb-msg").textContent = msg || "";
     }
@@ -1234,9 +1490,9 @@ class PaymentsApi {
       render("Example: failureThreshold 3, resetTimeout 4 steps. Make calls to continue.");
     }
     document.querySelectorAll("#cb-sim .call-btn").forEach(function (b) {
-      b.addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(b.dataset.who, b.dataset.res).join(". ") + "."); });
+      b.addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(b.dataset.who, b.dataset.res).join(". ") + ".", true); });
     });
-    document.getElementById("cb-wait").addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(null).join(". ") + "."); });
+    document.getElementById("cb-wait").addEventListener("click", function () { render("Step " + (st.t + 1) + ": " + step(null).join(". ") + ".", true); });
     document.querySelectorAll("#cb-sim [data-cb]").forEach(function (b) {
       b.addEventListener("click", function () {
         cfg[b.dataset.cb] += +b.dataset.d;
@@ -1244,7 +1500,7 @@ class PaymentsApi {
         render("failureThreshold " + cfg.thr + ", resetTimeout " + cfg.reset + " steps, successThreshold " + cfg.succ + ".");
       });
     });
-    document.getElementById("cb-reset").addEventListener("click", function () { reset(); render("Cleared. The circuit starts closed."); });
+    document.getElementById("cb-clear").addEventListener("click", function () { reset(); render("Cleared. The circuit starts closed."); });
     document.getElementById("cb-example").addEventListener("click", playExample);
     playExample();
   })();
@@ -1274,7 +1530,7 @@ class PaymentsApi {
       if (st.hist.length > MAXSTEPS) st.hist.shift();
       return notes;
     }
-    function render(msg) {
+    function render(msg, stepped) {
       document.getElementById("bh-slots").textContent = cfg.slots;
       document.getElementById("bh-queue").textContent = cfg.queue;
       document.querySelectorAll("#bh-sim [data-cfg]").forEach(function (b) {
@@ -1284,11 +1540,11 @@ class PaymentsApi {
       var run = "";
       for (var i = 0; i < cfg.slots; i++) {
         var r = st.running[i];
-        run += r ? '<div class="box busy">' + r.who + '<i style="width:' + ((DUR - r.left + 1) / DUR * 100) + '%"></i></div>' : '<div class="box"></div>';
+        run += r ? '<div class="box busy' + (stepped && r.left === DUR ? " fresh" : "") + '">' + r.who + '<i style="width:' + ((DUR - r.left + 1) / DUR * 100) + "%;--from:" + (stepped ? (DUR - r.left) / DUR * 100 : (DUR - r.left + 1) / DUR * 100) + '%"></i></div>' : '<div class="box"></div>';
       }
       document.getElementById("bh-run").innerHTML = run;
       var q = "";
-      for (var j = 0; j < cfg.queue; j++) q += st.queue[j] ? '<div class="box waiting">' + st.queue[j] + "</div>" : '<div class="box"></div>';
+      for (var j = 0; j < cfg.queue; j++) q += st.queue[j] ? '<div class="box waiting' + (stepped && st.hist.length && st.hist[st.hist.length - 1].row[st.queue[j]] === "q" ? " fresh" : "") + '">' + st.queue[j] + "</div>" : '<div class="box"></div>';
       document.getElementById("bh-q").innerHTML = q || '<div class="box none">no queue</div>';
       document.querySelectorAll("#bh-sim .who-btn").forEach(function (b) { b.setAttribute("aria-pressed", String(!!pending[b.dataset.who])); });
       var n = Math.max(st.hist.length, 8), h = "";
@@ -1302,7 +1558,7 @@ class PaymentsApi {
       });
       h += '<div class="tl-axis">time</div>';
       var g = document.getElementById("bh-grid");
-      g.style.setProperty("--n", n); g.innerHTML = h;
+      g.style.setProperty("--n", n); g.innerHTML = h; g.classList.toggle("stepped", !!stepped);
       followNow(g);
       document.getElementById("bh-msg").textContent = msg || "";
     }
@@ -1320,7 +1576,7 @@ class PaymentsApi {
       var notes = step(arr);
       var still = st.running.filter(function (r) { return r.left < DUR; }).map(function (r) { return r.who + " keeps running"; });
       var all = notes.concat(still);
-      render("Step " + st.t + ": " + (all.length ? all.join(", ") + "." : "nothing happens."));
+      render("Step " + st.t + ": " + (all.length ? all.join(", ") + "." : "nothing happens."), true);
     });
     document.querySelectorAll("#bh-sim [data-cfg]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -1333,6 +1589,165 @@ class PaymentsApi {
     document.getElementById("bh-example").addEventListener("click", playExample);
     playExample();
   })();
+
+  // --- Shared helpers for the policy playgrounds ---
+  var WHO = ["A", "B", "C"];
+  function drawGrid(g, hist, meters, nMin, stepped) {
+    var n = Math.max(hist.length, nMin), h = "";
+    WHO.forEach(function (w) {
+      h += '<div class="tl-lbl who">' + w + "</div>";
+      for (var k = 0; k < n; k++) { var e = hist[k]; h += '<div class="tl-cell' + (k === hist.length - 1 ? " now" : "") + '" data-c="' + k + '">' + (e ? (MK[e.row[w]] || "") : "") + "</div>"; }
+    });
+    meters.forEach(function (m) {
+      h += '<div class="tl-lbl">' + m[0] + "</div>";
+      for (var k = 0; k < n; k++) { var e = hist[k], v = e ? e[m[1]] : ""; h += '<div class="tl-cell meter' + (m[2] && e && m[2](v) ? " hot" : "") + '">' + (v === undefined ? "" : v) + "</div>"; }
+    });
+    h += '<div class="tl-axis">time</div>';
+    g.style.setProperty("--n", n); g.innerHTML = h; g.classList.toggle("stepped", !!stepped);
+    followNow(g);
+  }
+  function pill(el, col, html, stepped, key) {
+    el.innerHTML = html; el.style.color = col; el.style.background = "color-mix(in srgb, " + col + " 12%, transparent)";
+    if (stepped && el.dataset.key !== undefined && el.dataset.key !== key) restart(el, "pulse");
+    el.dataset.key = key;
+  }
+  function wireSim(pfx, api) {
+    var root = document.getElementById(pfx + "-sim"), pending = {};
+    function sel() { return WHO.filter(function (w) { return pending[w]; }); }
+    root.querySelectorAll(".who-btn").forEach(function (b) {
+      b.addEventListener("click", function () { var w = b.dataset.who; if (pending[w]) delete pending[w]; else pending[w] = true; b.setAttribute("aria-pressed", String(!!pending[w])); });
+    });
+    document.getElementById(pfx + "-step").addEventListener("click", function () {
+      var arr = sel(); pending = {};
+      root.querySelectorAll(".who-btn").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+      api.next(arr);
+    });
+    root.querySelectorAll("[data-" + pfx + "]").forEach(function (b) {
+      b.addEventListener("click", function () { api.cfg(b.getAttribute("data-" + pfx), +b.dataset.d); });
+    });
+    document.getElementById(pfx + "-clear").addEventListener("click", api.clear);
+    document.getElementById(pfx + "-example").addEventListener("click", api.example);
+    api.example();
+  }
+  function setStepper(pfx, key, val, lo, hi) {
+    document.getElementById(key).textContent = val;
+    document.querySelectorAll('[data-' + pfx + '="' + key + '"]').forEach(function (b) { var v = val + (+b.dataset.d); b.disabled = v < lo || v > hi; });
+  }
+
+  // --- Throttle playground ---
+  (function () {
+    if (!document.getElementById("th-sim")) return;
+    var cfg = { limit: 3, win: 5 }, LIM = { "th-limit": ["limit", 1, 5], "th-win": ["win", 2, 8] }, MAXSTEPS = 24, st;
+    var EXAMPLE = [["A", "B", "C"], ["A"], ["B"], [], [], ["A", "C"], ["B"], ["C"], [], [], [], ["A", "B"]];
+    function reset() { st = { t: 0, used: [], hist: [] }; }
+    function step(arr) {
+      var row = { A: ".", B: ".", C: "." }, notes = [];
+      var before = st.used.length;
+      st.used = st.used.filter(function (u) { return st.t - u.t < cfg.win; });
+      if (st.used.length < before) notes.push((before - st.used.length) + " slot" + (before - st.used.length > 1 ? "s leave" : " leaves") + " the window");
+      arr.forEach(function (w) {
+        if (st.used.length < cfg.limit) { st.used.push({ who: w, t: st.t }); row[w] = "o"; notes.push(w + " is allowed"); }
+        else { var ra = st.used[0].t + cfg.win - st.t; row[w] = "r"; notes.push(w + " is rejected with ThrottleError, retryAfter " + ra + " step" + (ra > 1 ? "s" : "")); }
+      });
+      st.hist.push({ row: row, left: cfg.limit - st.used.length });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      st.t++;
+      return notes;
+    }
+    function render(msg, stepped) {
+      setStepper("th", "th-limit", cfg.limit, 1, 5); setStepper("th", "th-win", cfg.win, 2, 8);
+      document.getElementById("th-win-lbl").textContent = "Window · last " + cfg.win + " steps";
+      // Slots as they will be seen by the next call.
+      var live = st.used.filter(function (u) { return st.t - u.t < cfg.win; }), b = "";
+      for (var i = 0; i < cfg.limit; i++) {
+        var u = live[i];
+        b += u ? '<div class="box busy' + (stepped && u.t === st.t - 1 ? " fresh" : "") + '" title="frees up in ' + (u.t + cfg.win - st.t) + ' steps">' + u.who + '<i style="width:' + ((u.t + cfg.win - st.t) / cfg.win * 100) + "%;--from:" + ((u.t + cfg.win - st.t + 1) / cfg.win * 100) + '%"></i></div>' : '<div class="box"></div>';
+      }
+      document.getElementById("th-slots").innerHTML = b;
+      var left = cfg.limit - live.length;
+      pill(document.getElementById("th-left"), left ? "var(--ok)" : "var(--fail)", left + " <small>of " + cfg.limit + " for the next step</small>", stepped, String(!!left));
+      var g = document.getElementById("th-grid");
+      drawGrid(g, st.hist, [["slots left", "left", function (v) { return v === 0; }]], 12, stepped);
+      if (st.hist.length) {
+        var k = st.hist.length, a = g.querySelector('.tl-cell[data-c="' + Math.max(0, k - cfg.win) + '"]'), z = g.querySelector('.tl-cell[data-c="' + (k - 1) + '"]');
+        var win = document.createElement("div"); win.className = "tl-window";
+        win.innerHTML = "<b>window · " + cfg.win + " steps</b>";
+        win.style.left = (a.offsetLeft - 2) + "px"; win.style.width = (z.offsetLeft + z.offsetWidth - a.offsetLeft + 4) + "px";
+        g.insertBefore(win, g.firstChild);
+      }
+      document.getElementById("th-msg").textContent = msg || "";
+    }
+    wireSim("th", {
+      next: function (arr) { var n = step(arr); render("Step " + st.t + ": " + (n.length ? n.join(", ") + "." : "nothing happens."), true); },
+      cfg: function (key, d) { var c = LIM[key]; cfg[c[0]] += d; render("limit " + cfg.limit + ", interval " + cfg.win + " steps. Applies from the next step."); },
+      clear: function () { reset(); render("Cleared. Pick who calls and press Next step."); },
+      example: function () { cfg = { limit: 3, win: 5 }; reset(); EXAMPLE.forEach(step); render("Example: limit 3, interval 5 steps. Pick who calls and press Next step to continue."); }
+    });
+  })();
+
+  // --- cache and dedupe playgrounds (one key, the service takes 2 steps) ---
+  function keyedSim(pfx, isCache, example, ttl0) {
+    if (!document.getElementById(pfx + "-sim")) return;
+    var DUR = 2, MAXSTEPS = 24, cfg = { ttl: ttl0, fail: false }, st;
+    function reset() { st = { t: 0, flight: null, entry: null, hist: [] }; }
+    function setFail(f) {
+      cfg.fail = f;
+      document.querySelectorAll("[data-" + pfx + "-fail]").forEach(function (b) { b.setAttribute("aria-checked", String((b.getAttribute("data-" + pfx + "-fail") === "1") === f)); });
+    }
+    document.querySelectorAll("[data-" + pfx + "-fail]").forEach(function (b) {
+      b.addEventListener("click", function () { setFail(b.getAttribute("data-" + pfx + "-fail") === "1"); });
+    });
+    function step(arr) {
+      var row = { A: ".", B: ".", C: "." }, notes = [];
+      if (st.flight && st.t - st.flight.start >= DUR) {
+        var f = st.flight; st.flight = null;
+        if (f.fail) notes.push(f.who + "'s call fails" + (isCache ? ", nothing is cached" : " and the key is released"));
+        else if (isCache) { st.entry = { exp: st.t + cfg.ttl - 1 }; notes.push("the value arrives and is cached for " + cfg.ttl + " steps"); }
+        else notes.push(f.who + "'s call resolves and the key is released");
+      } else if (st.flight) row[st.flight.who] = "-";
+      if (st.entry && st.t > st.entry.exp) { st.entry = null; notes.push("the entry expires"); }
+      arr.forEach(function (w) {
+        if (isCache && st.entry) { row[w] = "h"; notes.push(w + " hits the cache"); }
+        else if (st.flight) {
+          if (st.flight.who === w) { notes.push(w + " is already waiting"); return; }
+          row[w] = st.flight.fail ? "S" : "s"; notes.push(w + " gets " + st.flight.who + "'s in-flight promise" + (st.flight.fail ? ", which will fail" : ""));
+        } else {
+          st.flight = { who: w, start: st.t, fail: cfg.fail }; row[w] = cfg.fail ? "x" : "o";
+          notes.push(w + (isCache ? " misses and calls the service" : " calls the service") + (cfg.fail ? " (it will fail)" : ""));
+        }
+      });
+      st.hist.push({ row: row, ttl: isCache && st.entry ? st.entry.exp - st.t + 1 : "", pend: st.flight ? 1 : 0 });
+      if (st.hist.length > MAXSTEPS) st.hist.shift();
+      st.t++;
+      return notes;
+    }
+    function render(msg, stepped) {
+      if (isCache) setStepper(pfx, pfx + "-ttl", cfg.ttl, 2, 8);
+      var el = document.getElementById(pfx + "-state"), f = st.flight, e = st.entry && st.t <= st.entry.exp;
+      if (f) pill(el, "var(--wait)", "in flight <small>" + f.who + "'s call" + (f.fail ? ", will fail" : "") + "</small>", stepped, "f");
+      else if (e) pill(el, "var(--accent)", "cached <small>" + (st.entry.exp - st.t + 1) + " step" + (st.entry.exp - st.t ? "s" : "") + " left</small>", stepped, "c");
+      else pill(el, "var(--muted)", (isCache ? "empty" : "free") + " <small>no call in flight</small>", stepped, "e");
+      drawGrid(document.getElementById(pfx + "-grid"), st.hist, isCache ? [["ttl", "ttl"]] : [["pending", "pend"]], isCache ? 16 : 13, stepped);
+      document.getElementById(pfx + "-msg").textContent = msg || "";
+    }
+    if (isCache) document.getElementById("ca-del").addEventListener("click", function () {
+      var had = st.entry && st.t <= st.entry.exp; st.entry = null;
+      render(had ? "delete(key): the entry is gone, the next call misses." : "delete(key): there was no cached entry.", true);
+    });
+    wireSim(pfx, {
+      next: function (arr) { var n = step(arr); render("Step " + st.t + ": " + (n.length ? n.join(", ") + "." : "nothing happens."), true); },
+      cfg: function (key, d) { cfg.ttl += d; render("ttl " + cfg.ttl + " steps. Applies to the next value that arrives."); },
+      clear: function () { reset(); setFail(false); render("Cleared. Pick who calls and press Next step."); },
+      example: function () {
+        cfg.ttl = ttl0; reset();
+        example.forEach(function (s) { setFail(!!s[1]); step(s[0]); });
+        setFail(false);
+        render("Example" + (isCache ? ": ttl " + ttl0 + " steps" : "") + ". Pick who calls and press Next step to continue.");
+      }
+    });
+  }
+  keyedSim("ca", true, [[["A"]], [["B"]], [["C"]], [[]], [["A"]], [[]], [["B"]], [[]], [["C", "A"], 1], [[]], [[]], [["B"]], [["C"]], [["A"]], [[]], [[]]], 5);
+  keyedSim("dd", false, [[["A"]], [["B"]], [["C"]], [["A"]], [[]], [["B"]], [[]], [[]], [["C", "A"], 1], [[]], [["B"]], [["C"]], [[]]], 0);
 
   // --- waitForTask behavior explorer ---
   var bx = { limit: "timeout", wait: "true", task: "ok" };
@@ -1357,10 +1772,11 @@ class PaymentsApi {
     else if (w && !ok && !t) { att = pin("fail", settle, "✕", "rejects with the task's error", true); verdict = "<code>attempt</code> waits, then <strong>rejects with the task's error</strong>. No retry and no <code>fallback</code>."; retry = false; fb = false; status = "aborted"; }
     else if (t) { att = pin("fail", settle, "✕", "rejects with TimeoutError"); verdict = "<code>attempt</code> <strong>fails right away with <code>TimeoutError</code></strong>. The task keeps running and its result is ignored. Another attempt runs, or <code>fallback</code> if attempts run out."; retry = true; fb = true; status = "failure / fallback"; }
     else { att = pin("fail", settle, "✕", "rejects with signal.reason"); verdict = "<code>attempt</code> <strong>rejects right away with <code>signal.reason</code></strong>. The task keeps running and its result is ignored. No retry and no <code>fallback</code>."; retry = false; fb = false; status = "aborted"; }
-    document.getElementById("bx-task").innerHTML = taskHtml;
-    document.getElementById("bx-att").innerHTML = att + '<div class="bx-abort" style="left:' + ABORT + '%"></div>';
+    var CUR = '<i class="bx-cur"></i>';
+    document.getElementById("bx-task").innerHTML = '<div class="bx-layer">' + taskHtml + "</div>" + CUR;
+    document.getElementById("bx-att").innerHTML = '<div class="bx-layer">' + att + '<div class="bx-abort" style="left:' + ABORT + '%"></div></div>' + CUR;
     var nx = retry ? bar("next", Math.min(settle + 6, 90), 100, "attempt #2 (after delay)") : '<span class="bx-empty">no more attempts</span>';
-    document.getElementById("bx-next").innerHTML = nx;
+    document.getElementById("bx-next").innerHTML = '<div class="bx-layer">' + nx + "</div>" + CUR;
     document.getElementById("bx-verdict").innerHTML = verdict;
     document.getElementById("bx-chips").innerHTML =
       '<span class="chip ' + (retry ? "yes" : "no") + '">retries: ' + (retry ? "yes" : "no") + "</span>" +
@@ -1371,10 +1787,174 @@ class PaymentsApi {
     btn.addEventListener("click", function () {
       bx[btn.dataset.k] = btn.dataset.v;
       document.querySelectorAll('#bx [data-k="' + btn.dataset.k + '"]').forEach(function (b) { b.setAttribute("aria-checked", String(b === btn)); });
-      renderBx();
+      renderBx(); sweepBx();
     });
   });
+  var bxStage = document.querySelector("#bx .bx-stage");
+  function sweepBx() { if (!RM) restart(bxStage, "sweep"); }
+  document.getElementById("bx-replay").addEventListener("click", sweepBx);
   renderBx();
+  onVisible(bxStage, sweepBx);
+
+  // --- Lifecycle hooks player ---
+  (function () {
+    var root = document.getElementById("lc"); if (!root) return;
+    var log = document.getElementById("lc-log"), loop = document.getElementById("lc-loop");
+    var hooks = {}; root.querySelectorAll("[data-hook]").forEach(function (el) { hooks[el.dataset.hook] = el; });
+    var N = 3, kind = "retry", gen = 0;
+    function ctx(a) { return "{ attempt: " + a + ", attempts: " + N + " }"; }
+    function build(k) {
+      var ev = [{ h: "onStart", a: ctx(0) }];
+      function att(a, last) { ev.push({ h: "onAttempt", a: "{ attempt: " + a + ", attempts: " + N + ", lastError: " + (last || "undefined") + " }", att: a }); }
+      function retry(a, err, ms) { ev.push({ h: "onRetry", a: "{ attempt: " + a + ", attempts: " + N + ", error: " + err + ", delay: " + ms + " }", att: a - 1 }); }
+      function error(a, err, will) { ev.push({ h: "onError", a: "(" + err + ", { attempt: " + a + ", attempts: " + N + ", willRetry: " + will + " })", att: a }); }
+      if (k === "ok") { att(1); ev.push({ h: "onSuccess", a: "(value, " + ctx(1) + ")" }); ev.push({ h: "onSettled", a: '{ status: "success", attempt: 1, attempts: ' + N + ", value }", end: "attempt() resolves with value" }); }
+      else if (k === "retry" || k === "timeout") {
+        att(1);
+        var err = k === "timeout" ? "TimeoutError" : "Error";
+        if (k === "timeout") ev.push({ h: "onTimeout", a: "{ attempt: 1, attempts: " + N + ", timeout: 2000 }", att: 1 });
+        error(1, err, true); retry(2, err, 200); att(2, err);
+        ev.push({ h: "onSuccess", a: "(value, " + ctx(2) + ")" });
+        ev.push({ h: "onSettled", a: '{ status: "success", attempt: 2, attempts: ' + N + ", value }", end: "attempt() resolves with value" });
+      } else if (k === "fail" || k === "fallback") {
+        for (var a = 1; a <= N; a++) { att(a, a > 1 ? "Error" : ""); error(a, "Error", a < N); if (a < N) retry(a + 1, "Error", 200 * Math.pow(2, a - 1)); }
+        ev.push({ h: "onFailure", a: "(Error, " + ctx(N) + ")" });
+        if (k === "fallback") {
+          ev.push({ note: "fallback(Error, " + ctx(N) + ") returns cachedData" });
+          ev.push({ h: "onSettled", a: '{ status: "fallback", attempt: ' + N + ", attempts: " + N + ", error, value: cachedData }", end: "attempt() resolves with cachedData" });
+        } else ev.push({ h: "onSettled", a: '{ status: "failure", attempt: ' + N + ", attempts: " + N + ", error }", end: "attempt() rejects with the last Error" });
+      } else {
+        att(1);
+        ev.push({ note: "signal.abort() while attempt 1 runs: no onError, no retry" });
+        ev.push({ h: "onAbort", a: "(reason, " + ctx(1) + ")" });
+        ev.push({ h: "onSettled", a: '{ status: "aborted", attempt: 1, attempts: ' + N + ", error }", end: "attempt() rejects, without fallback" });
+      }
+      return ev;
+    }
+    function clear() {
+      Object.keys(hooks).forEach(function (k) { hooks[k].classList.remove("active", "done"); });
+      loop.removeAttribute("data-att"); log.innerHTML = "";
+    }
+    function apply(e, animate) {
+      Object.keys(hooks).forEach(function (k) { if (hooks[k].classList.contains("active")) { hooks[k].classList.remove("active"); hooks[k].classList.add("done"); } });
+      var li = document.createElement("li");
+      if (e.note) li.innerHTML = '<span class="tok-c">// ' + e.note + "</span>";
+      else {
+        hooks[e.h].classList.add("active");
+        li.innerHTML = "<b>" + e.h + "</b>" + (e.a.charAt(0) === "(" ? "" : "(") + e.a.replace(/</g, "&lt;") + (e.a.charAt(0) === "(" ? "" : ")");
+      }
+      if (e.att) loop.setAttribute("data-att", e.att + "/" + N);
+      if (animate) li.className = "new";
+      log.appendChild(li);
+      if (e.end) { var end = document.createElement("li"); end.className = "end" + (animate ? " new" : ""); end.textContent = "→ " + e.end; log.appendChild(end); }
+      log.scrollTop = log.scrollHeight;
+    }
+    function play() {
+      var my = ++gen, ev = build(kind), i = 0;
+      clear();
+      if (RM) { ev.forEach(function (e) { apply(e, false); }); return; }
+      (function tick() {
+        if (my !== gen || i >= ev.length) return;
+        apply(ev[i++], true);
+        setTimeout(tick, 650);
+      })();
+    }
+    root.querySelectorAll("[data-lc]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        kind = b.dataset.lc;
+        root.querySelectorAll("[data-lc]").forEach(function (x) { x.setAttribute("aria-checked", String(x === b)); });
+        play();
+      });
+    });
+    document.getElementById("lc-play").addEventListener("click", play);
+    // Static readers see the full sequence; it replays when scrolled into view.
+    build(kind).forEach(function (e) { apply(e, false); });
+    if (!RM) onVisible(root, play);
+  })();
+
+  // --- Backoff explorer ---
+  (function () {
+    var root = document.getElementById("bo"); if (!root) return;
+    var o = { fn: "exponential", ms: 200, max: 0, jit: "", att: 6 }, RUN = 300, draws = [];
+    var NAME = { fixed: "fixedBackoff", linear: "linearBackoff", exponential: "exponentialBackoff", fibonacci: "fibonacciBackoff" };
+    function compute(r) {
+      if (o.fn === "fixed") return o.ms;
+      if (o.fn === "linear") return o.ms * r;
+      if (o.fn === "exponential") return o.ms * Math.pow(2, r - 1);
+      var a = 1, b = 1; for (var i = 1; i < r; i++) { var t = a + b; a = b; b = t; } return o.ms * a;
+    }
+    function fmtMs(v) { return v >= 1000 ? (Math.round(v / 100) / 10) + " s" : Math.round(v) + " ms"; }
+    function lit(v) { return v >= 1000 ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, "_") : String(v); }
+    function roll() {
+      draws = [];
+      for (var r = 1; r < o.att; r++) {
+        var raw = compute(r), base = o.max ? Math.min(raw, o.max) : raw;
+        var v = o.jit === "full" ? Math.random() * base : o.jit === "equal" ? base / 2 + Math.random() * (base / 2) : base;
+        draws.push({ raw: raw, base: base, v: v });
+      }
+    }
+    function render(animate) {
+      document.getElementById("bo-att").textContent = o.att;
+      root.querySelectorAll("[data-bo-att]").forEach(function (b) { var v = o.att + (+b.dataset.boAtt); b.disabled = v < 2 || v > 8; });
+      document.getElementById("bo-roll").hidden = !o.jit;
+      var top = Math.max.apply(null, draws.map(function (d) { return d.base; })) || 1;
+      var chart = document.getElementById("bo-chart"), x = document.getElementById("bo-x");
+      // Reuse columns so heights transition between configurations.
+      while (chart.children.length > draws.length) chart.removeChild(chart.lastChild);
+      while (chart.children.length < draws.length) {
+        var c = document.createElement("div"); c.className = "bo-col";
+        c.innerHTML = '<div class="bo-range"></div><div class="bo-fill" style="height:0"><span class="bo-val"></span></div>';
+        chart.appendChild(c);
+      }
+      draws.forEach(function (d, i) {
+        var col = chart.children[i], range = col.children[0], fill = col.children[1];
+        range.style.height = (o.jit ? d.base / top * 100 : 0) + "%"; range.style.opacity = o.jit ? 1 : 0;
+        fill.style.height = Math.max(1.5, d.v / top * 100) + "%";
+        fill.classList.toggle("capped", !!o.max && d.raw > o.max);
+        fill.firstChild.textContent = fmtMs(d.v);
+      });
+      x.innerHTML = draws.map(function (d, i) { return "<span><i>before </i>#" + (i + 2) + "</span>"; }).join("");
+      chart.setAttribute("aria-label", "Delay before each retry: " + draws.map(function (d) { return fmtMs(d.v); }).join(", "));
+      var opts = [];
+      if (o.max) opts.push("maxDelay: " + lit(o.max));
+      if (o.jit) opts.push('jitter: "' + o.jit + '"');
+      var src = "resilience({\n  attempts: " + o.att + ",\n  delay: " + NAME[o.fn] + "(" + o.ms + (opts.length ? ", { " + opts.join(", ") + " }" : "") + "),\n}).attempt(task);";
+      document.getElementById("bo-code").innerHTML = highlight(src);
+      // Timeline: attempt, wait, attempt, ...
+      var total = RUN * o.att + draws.reduce(function (s, d) { return s + d.v; }, 0), t = 0, html = "";
+      var speed = 2.6; // seconds for the whole run
+      function seg(cls, dur, inner) {
+        var w = dur / total * 100, st = "width:" + w + "%;animation-delay:" + (t / total * speed) + "s;animation-duration:" + Math.max(0.12, dur / total * speed) + "s";
+        t += dur;
+        return '<div class="seg ' + cls + '" style="' + st + '">' + inner + "</div>";
+      }
+      for (var a = 1; a <= o.att; a++) {
+        var last = a === o.att;
+        html += seg("att " + (last ? "ok" : "fail"), RUN, (RUN / total > 0.045 ? "#" + a : ""));
+        if (!last) { var d = draws[a - 1]; html += seg("gap", d.v, d.v / total > 0.09 ? "<span>" + fmtMs(d.v) + "</span>" : ""); }
+      }
+      document.getElementById("bo-lane").innerHTML = html;
+      document.getElementById("bo-total").textContent = fmtMs(total);
+      var waits = total - RUN * o.att;
+      document.getElementById("bo-cap").textContent = o.att + " attempts × 300 ms + " + (o.att - 1) + " waits (" + fmtMs(waits) + ") ≈ " + fmtMs(total) + " until the last attempt succeeds." + (o.jit ? " Jitter changes the waits on every run." : "");
+      if (animate && !RM) restart(document.getElementById("bo-track"), "play");
+    }
+    root.querySelectorAll("[data-bo]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var k = b.dataset.bo, v = b.dataset.v;
+        o[k] = k === "ms" || k === "max" ? +v : v;
+        root.querySelectorAll('[data-bo="' + k + '"]').forEach(function (x) { x.setAttribute("aria-checked", String(x === b)); });
+        roll(); render(true);
+      });
+    });
+    root.querySelectorAll("[data-bo-att]").forEach(function (b) {
+      b.addEventListener("click", function () { o.att += +b.dataset.boAtt; roll(); render(true); });
+    });
+    document.getElementById("bo-roll").addEventListener("click", function () { roll(); render(true); });
+    document.getElementById("bo-play").addEventListener("click", function () { if (o.jit) roll(); render(true); });
+    roll(); render(false);
+    onVisible(document.getElementById("bo-track"), function () { render(true); });
+  })();
 
   // --- Mobile contents drawer ---
   var nav = document.getElementById("sidenav"), mb = document.getElementById("menu-btn");
